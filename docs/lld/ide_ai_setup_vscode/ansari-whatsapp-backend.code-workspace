@@ -1,0 +1,72 @@
+{
+	// Preliminary note: Any relative path mentioned in `folders` key is relative to this file's location.
+	// 	(read NOTE below for details/examples)
+	
+	"folders": [
+		{
+			// NOTE: If you move this file from its current dir. level (i.e., `./docs/lld/ide_ai_setup_vscode`), 
+			// 	then you need to change the path below.
+			// 	For example, if you want to take a copy of this file and paste it in ansari-whatsapp/.vscode/ directory,
+			// 	then you need to change the paths below to be `./` and `../ansari-backend` respectively.
+			"path": "../../../../ansari-whatsapp",
+		},
+		{
+			"path": "../../../../ansari-backend",
+		},
+	],
+
+	// Preliminary note: any relative path mentioned in `settings` key is relative to `${workspaceFolder}` 
+	// 	(read NOTE 1 below for details)
+
+	"settings": {
+		"terminal.integrated.profiles.windows": {
+			"PS-Smart-Activate": {
+				"source": "PowerShell",
+				"args": [
+					"-NoExit",
+					"-Command",
+					// The following multi-line command does these operations:
+					// 1. Gets the current location (directory) where the terminal was opened
+					// 2. Activates the appropriate environment based on which folder is active:
+					//    - ansari-backend's .venv if in that folder
+					//    - ansari-whatsapp's .venv if anywhere else
+					"$terminal_cwd = (Get-Location).Path;",
+					"$backend_venv_path = '../ansari-backend/.venv/Scripts/activate.ps1';",
+					"$whatsapp_venv_path = './.venv/Scripts/activate.ps1';",
+					"if ($terminal_cwd -like '*ansari-backend*') {",
+					"    Write-Host \"Activating ansari-backend environment\" -ForegroundColor DarkYellow;",
+					"    & $backend_venv_path;",
+					"    function runb { python src/ansari/app/main_api.py }",
+					"} else {",
+					"    Write-Host \"Activating ansari-whatsapp environment\" -ForegroundColor DarkGreen;",
+					"    & $whatsapp_venv_path;",
+					"    function runw { python src/ansari_whatsapp/app/main.py }",
+					"}",
+					// NOTE 1: the `../` is because VSCode automatically sets up 
+					// 	the first path mentioned in "folders" list (scroll up) to be the `${workspaceFolder}`,
+					//  (i.e., `folders[0]["path"]`). 
+					// 	and so if that first path is set to ansari-whatsapp, 
+					// 	then we need to go back by one folder, then access ansari-backend (i.e., `../ansari-backend`).
+					// Note 2: The `&` is used to run the command in the current shell.
+				]
+			}
+		},
+		"files.associations": {
+			"**/*.ipynb.raw": "python"
+		},
+		"workbench.editor.enablePreview": false,
+		"terminal.integrated.defaultProfile.windows": "PS-Smart-Activate",
+		"github.copilot.chat.codeGeneration.instructions": [
+			{
+				"text": "When answering a user's prompt, if you need to run a command in the terminal, then make sure that in case we're in powershell right now, do not use \"&&\" to chain commands, instead use \";\"."
+			},
+			{
+				// NOTE: The `./` is because of the same logic exaplained in the NOTE above.
+				"file": "./docs/lld/ide_ai_setup_vscode/doc_related_instructions.md",
+			},
+			{
+				"text": "Whenever you make big changes to the code (e.g., adding new features, changing major execution flows, etc.), then update the relevant documentation files accordingly: docs\\lld\\implementation_guide.md (for the code in this repo) and docs\\hld\\architecture.md (for the architecture of the system)."
+			},
+		]
+	}
+}

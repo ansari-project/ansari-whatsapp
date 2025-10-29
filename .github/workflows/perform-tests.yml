@@ -1,0 +1,85 @@
+# GitHub Actions workflow for ansari-whatsapp microservice
+# This workflow tests the WhatsApp integration functionality using pytest and TestClient
+
+name: Ansari WhatsApp Pytests
+
+on:
+  # Trigger the workflow on push or pull request events
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+  # Allow other workflows to trigger this workflow
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  ansari-whatsapp-tests:
+    runs-on: ubuntu-latest
+    environment: gh-actions-staging-env
+
+    env:
+      ########## ansari-backend's settings ##########
+      BACKEND_SERVER_URL: ${{ vars.BACKEND_SERVER_URL }}
+
+      ########### Meta Business API settings ###########
+      META_BUSINESS_PHONE_NUMBER_ID: ${{ secrets.META_BUSINESS_PHONE_NUMBER_ID }}
+      META_ACCESS_TOKEN_FROM_SYS_USER: ${{ secrets.META_ACCESS_TOKEN_FROM_SYS_USER}}
+      META_WEBHOOK_VERIFY_TOKEN: ${{ secrets.META_WEBHOOK_VERIFY_TOKEN }}
+
+      ########### ansari-whatsapp's settings ##########
+      DEPLOYMENT_TYPE: ${{ vars.DEPLOYMENT_TYPE }}
+      WHATSAPP_DEV_PHONE_NUM: ${{ secrets.WHATSAPP_DEV_PHONE_NUM}}
+      WHATSAPP_DEV_MESSAGE_ID: ${{ secrets.WHATSAPP_DEV_MESSAGE_ID}}
+      # If MOCK_META_API is true, then all above META_*/WHATSAPP_* settings are unused during tests  
+      MOCK_META_API: ${{ vars.MOCK_META_API || 'false' }}
+      MOCK_ANSARI_CLIENT: ${{ vars.MOCK_ANSARI_CLIENT || 'false' }}
+
+      # Build/Test settings
+      PYTHONPATH: 'src:.' 
+      # Enable uv to install packages into system Python (modern approach instead of passing `--system` flag every time)
+      UV_SYSTEM_PYTHON: '1'
+
+    # Use a Python 3.10 container
+    container: python:3.10
+
+    steps:
+
+    # Check out the repository code
+    - name: Check out repository code
+      uses: actions/checkout@v4
+
+    # Install the uv tool
+    - name: Install uv
+      run: |
+        pip install uv
+
+    # Install Python dependencies using uv
+    # Install the project in editable mode with all dependencies from pyproject.toml
+    # Also ensure test dependencies are installed
+    - name: Install dependencies
+      run: |
+        uv pip install -e .
+        # uv pip install pytest pytest-asyncio python-dotenv
+
+    # Run WhatsApp service tests (no external server dependencies)
+    # These test WhatsApp webhook endpoints using TestClient
+    # Note: WhatsApp API endpoint tests are in ansari-backend repository
+    # They test backend API endpoints and use TestClient without external servers
+    - name: Test with pytest
+      run: |
+        pytest tests/test_whatsapp_service.py -v -s --tb=short --color=yes
+
+
+    # Optional: Upload test results as artifacts
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: |
+          tests/detailed_test_results_whatsapp_service.json
+          tests/test_runner.log
+        retention-days: 30

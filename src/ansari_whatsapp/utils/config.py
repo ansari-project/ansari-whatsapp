@@ -44,6 +44,7 @@ class WhatsAppSettings(BaseSettings):
     ########## ansari-backend's settings ##########
 
     BACKEND_SERVER_URL: str = "http://localhost:8000"
+    WHATSAPP_SERVICE_API_KEY: SecretStr  # Shared secret for service-to-service authentication
 
     ########### Meta Business API settings ###########
 
@@ -51,6 +52,7 @@ class WhatsAppSettings(BaseSettings):
     META_BUSINESS_PHONE_NUMBER_ID: SecretStr
     META_ACCESS_TOKEN_FROM_SYS_USER: SecretStr
     META_WEBHOOK_VERIFY_TOKEN: SecretStr
+    META_ANSARI_APP_SECRET: SecretStr  # Used for verifying webhook signatures (X-Hub-Signature-256)
     # NOTE: We add a default value here, since we never set this in staging/production/etc. environments
     #   I.e., this token is only used for local development with zrok (check .env.example for more details)
     META_WEBHOOK_ZROK_SHARE_TOKEN: SecretStr = SecretStr("your_token")

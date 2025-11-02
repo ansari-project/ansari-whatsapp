@@ -301,6 +301,6 @@ You can manually trigger deployments without pushing code:
 3. See application logs in real-time
 
 **Log groups:**
-- `/aws/apprunner/ansari-whatsapp-staging/service`
-- `/aws/apprunner/ansari-whatsapp-production/service`
+- `/aws/apprunner/ansari-whatsapp/staging/service`
+- `/aws/apprunner/ansari-whatsapp/production/service`
 

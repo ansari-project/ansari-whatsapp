@@ -7,8 +7,12 @@ on:
   # Trigger the workflow on push or pull request events
   push:
     branches: [ "main", "develop" ]
-  pull_request:
-    branches: [ "main", "develop" ]
+  # Can't run this on PRs from forked repo to upstream repo due to secrets not being passed.
+  #   Details: 
+  #   * https://stackoverflow.com/questions/66113900/github-actions-not-receiving-secrets
+  #   * https://github.com/orgs/community/discussions/50161
+  # pull_request:
+  #   branches: [ "main", "develop" ]
   # Allow other workflows to trigger this workflow
   workflow_call:
 

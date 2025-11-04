@@ -69,12 +69,15 @@ async def verify_meta_signature(request: Request) -> None:
     is_valid = hmac.compare_digest(computed_signature, received_signature)
 
     if not is_valid:
-        logger.error("Invalid webhook signature - request may not be from Meta")
+        logger.error("Invalid webhook signature; request isn't from Meta or you have misconfigured META_ANSARI_APP_SECRET")
         raise HTTPException(
             status_code=403,
             detail="Invalid signature",
             headers={"WWW-Authenticate": "HMAC-SHA256"},
         )
+    else:
+        logger.trace("Webhook signature verified successfully")
+        logger.trace(f"{computed_signature=} \n {received_signature=}")
 
 
 def create_response_for_meta(

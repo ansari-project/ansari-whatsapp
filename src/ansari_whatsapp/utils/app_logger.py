@@ -84,26 +84,3 @@ def configure_logger():
             rotation="10 MB",
             catch=False,
         )
-
-# Error handler factory that creates context-specific error handlers
-# NOTE: This function is deprecated in favor of explicit try-except blocks with custom exceptions.
-# It remains here for backward compatibility with any remaining @logger.catch decorators.
-def make_error_handler(context: str) -> Callable:
-    """Create a context-specific error handler (DEPRECATED).
-
-    This function is deprecated. Use explicit try-except blocks with custom exceptions instead.
-
-    Args:
-        context (str): Description of the operation that failed (e.g., "Error registering user")
-
-    Returns:
-        callable: An error handler function that can be used with logger.catch
-    """
-
-    def error_handler(exception):
-        exception_msg = str(exception)
-        # NOTE: Loguru's exception method automatically includes the stack trace after the message
-        logger.exception(f"{context}: {exception_msg}")
-        return
-
-    return error_handler

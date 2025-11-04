@@ -10,6 +10,7 @@ This module contains functions for:
 import hmac
 import hashlib
 from loguru import logger
+from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse, Response
 
 from ansari_whatsapp.utils.config import get_settings
@@ -17,7 +18,7 @@ from ansari_whatsapp.utils.config import get_settings
 settings = get_settings()
 
 
-def verify_meta_signature(payload_body: bytes, signature_header: str) -> bool:
+async def verify_meta_signature(request: Request) -> None:
     """
     Verify that the webhook request came from Meta using HMAC-SHA256 signature.
 
@@ -30,15 +31,28 @@ def verify_meta_signature(payload_body: bytes, signature_header: str) -> bool:
     - https://stackoverflow.com/questions/75422064/validate-x-hub-signature-256-meta-whatsapp-webhook-request
 
     Args:
-        payload_body: Raw request body as bytes (before JSON parsing)
-        signature_header: Value from X-Hub-Signature-256 header (format: "sha256=<hash>")
+        request: FastAPI Request object containing the webhook payload and headers
 
-    Returns:
-        bool: True if signature is valid, False otherwise
+    Raises:
+        HTTPException: 403 Forbidden if signature is invalid or missing
+
+    Note:
+        This is used with FastAPI's Depends() to automatically validate all
+        webhook requests before processing them, similar to the authentication
+        pattern used in ansari-backend.
     """
+    # Get raw body bytes (cached after first read)
+    body_bytes = await request.body()
+    signature_header = request.headers.get("X-Hub-Signature-256", "")
+
     if not signature_header or not signature_header.startswith("sha256="):
         logger.warning("Missing or invalid X-Hub-Signature-256 header format")
-        return False
+        logger.error("Webhook signature verification failed - rejecting request")
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid signature",
+            headers={"WWW-Authenticate": "HMAC-SHA256"},
+        )
 
     # Extract the signature from the header (remove "sha256=" prefix)
     received_signature = signature_header.replace("sha256=", "")
@@ -47,7 +61,7 @@ def verify_meta_signature(payload_body: bytes, signature_header: str) -> bool:
     app_secret = settings.META_ANSARI_APP_SECRET.get_secret_value().encode('utf-8')
     computed_signature = hmac.new(
         app_secret,
-        payload_body,
+        body_bytes,
         hashlib.sha256
     ).hexdigest()
 
@@ -56,8 +70,11 @@ def verify_meta_signature(payload_body: bytes, signature_header: str) -> bool:
 
     if not is_valid:
         logger.error("Invalid webhook signature - request may not be from Meta")
-
-    return is_valid
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid signature",
+            headers={"WWW-Authenticate": "HMAC-SHA256"},
+        )
 
 
 def create_response_for_meta(

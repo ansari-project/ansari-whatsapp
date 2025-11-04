@@ -12,7 +12,7 @@ https://www.perplexity.ai/search/explain-fastapi-s-backgroundta-rnpU7D19QpSxp2ZO
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends
 from fastapi.responses import HTMLResponse, Response, JSONResponse
 from loguru import logger
 
@@ -131,7 +131,11 @@ async def verification_webhook(request: Request) -> str | None:
 
 
 @app.post("/whatsapp/v2")
-async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> Response:
+async def main_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    _: None = Depends(verify_meta_signature)
+) -> Response:
     """
     Handles the incoming WhatsApp webhook message from Meta's WhatsApp Business API.
 
@@ -188,23 +192,9 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
         - The staging "!d" prefix filter is a temporary workaround until dedicated test numbers
           are available for each environment.
     """
-    # Step 1: Verify webhook signature to ensure request is from Meta
-    # Get the raw body for signature verification (must be done before parsing JSON)
-    body_bytes = await request.body()
-    signature_header = request.headers.get("X-Hub-Signature-256", "")
-
-    if not verify_meta_signature(body_bytes, signature_header):
-        logger.error("Webhook signature verification failed - rejecting request")
-        return create_response_for_meta(
-            success=False,
-            message="Invalid signature",
-            status_code=403,
-            error_code="INVALID_SIGNATURE"
-        )
-
-    # Step 2: Parse the JSON payload (body already read above)
-    import json
-    data = json.loads(body_bytes.decode('utf-8'))
+    # Step 1: Signature verification now handled by Depends(verify_meta_signature_dependency)
+    # Step 2: Parse the JSON payload
+    data = await request.json()
 
     # Step 3: Extract message details from the webhook payload
     try:

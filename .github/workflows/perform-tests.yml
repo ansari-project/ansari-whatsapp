@@ -21,18 +21,24 @@ jobs:
     environment: gh-actions-staging-env
 
     env:
+      ########## Deployment settings ##########
+      DEPLOYMENT_TYPE: ${{ vars.DEPLOYMENT_TYPE || 'testing' }}
+
       ########## ansari-backend's settings ##########
       BACKEND_SERVER_URL: ${{ vars.BACKEND_SERVER_URL }}
 
       ########### Meta Business API settings ###########
       META_BUSINESS_PHONE_NUMBER_ID: ${{ secrets.META_BUSINESS_PHONE_NUMBER_ID }}
       META_ACCESS_TOKEN_FROM_SYS_USER: ${{ secrets.META_ACCESS_TOKEN_FROM_SYS_USER}}
-      META_WEBHOOK_VERIFY_TOKEN: ${{ secrets.META_WEBHOOK_VERIFY_TOKEN }}
+      META_WEBHOOK_VERIFY_TOKEN: ${{ secrets.META_WEBHOOK_VERIFY_TOKEN || 'test_verify_token' }}
+      META_ANSARI_APP_SECRET: ${{ secrets.META_ANSARI_APP_SECRET || 'test_app_secret' }}
 
       ########### ansari-whatsapp's settings ##########
-      DEPLOYMENT_TYPE: ${{ vars.DEPLOYMENT_TYPE }}
       WHATSAPP_DEV_PHONE_NUM: ${{ secrets.WHATSAPP_DEV_PHONE_NUM}}
       WHATSAPP_DEV_MESSAGE_ID: ${{ secrets.WHATSAPP_DEV_MESSAGE_ID}}
+      WHATSAPP_SERVICE_API_KEY: ${{ secrets.WHATSAPP_SERVICE_API_KEY}}
+
+      ########### Mock settings ###########
       # If MOCK_META_API is true, then all above META_*/WHATSAPP_* settings are unused during tests  
       MOCK_META_API: ${{ vars.MOCK_META_API || 'false' }}
       MOCK_ANSARI_CLIENT: ${{ vars.MOCK_ANSARI_CLIENT || 'false' }}

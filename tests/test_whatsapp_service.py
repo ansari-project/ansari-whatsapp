@@ -32,6 +32,8 @@ import os
 import pytest
 import time
 import httpx
+import hmac
+import hashlib
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -250,7 +252,21 @@ def test_webhook_message_basic(settings):
         logger.debug(f"   Payload: {format_payload_for_logging(payload)}")
         logger.debug(f"   Mock mode: {settings.MOCK_ANSARI_CLIENT}")
 
-        response = client.post("/whatsapp/v2", json=payload)
+        # Generate valid Meta signature for the request
+        # References:
+        # - https://developers.facebook.com/docs/graph-api/webhooks/getting-started#validate-payloads
+        # - https://stackoverflow.com/questions/75422064/validate-x-hub-signature-256-meta-whatsapp-webhook-request
+        body_bytes = json.dumps(payload, separators=(',', ':')).encode('utf-8')
+        app_secret = settings.META_ANSARI_APP_SECRET.get_secret_value().encode('utf-8')
+        signature = hmac.new(app_secret, body_bytes, hashlib.sha256).hexdigest()
+        headers = {"X-Hub-Signature-256": f"sha256={signature}"}
+
+        logger.debug(f"   Generated signature: sha256={signature[:16]}... (truncated)")
+
+        # Send request with exact body bytes and signature header
+        # Note: We use content= instead of json= to ensure exact byte representation
+        # This is critical because the signature is computed on the exact bytes
+        response = client.post("/whatsapp/v2", content=body_bytes, headers=headers)
 
         # With mock client, we should always get 200
         if response.status_code == 200:

@@ -1,38 +1,42 @@
-# Multi-stage build for smaller final image
-FROM python:3.10-slim as builder
+FROM python:3.13
 
-WORKDIR /app
+ENV PYTHONUNBUFFERED=1
 
-# Install uv for fast dependency installation
-RUN pip install --no-cache-dir uv
+WORKDIR /app/
 
-# Copy dependency files
-COPY pyproject.toml uv.lock ./
+# Install uv
+# Ref: https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 
-# Install dependencies using uv (much faster than pip)
-# --frozen: Don't update uv.lock
-# --no-dev: Skip development dependencies
-RUN uv sync --frozen --no-dev
-
-# Runtime stage - smaller final image
-FROM python:3.10-slim
-
-WORKDIR /app
-
-# Copy installed dependencies from builder stage
-COPY --from=builder /app/.venv /app/.venv
-
-# Copy application code
-COPY . .
-
-# Create logs directory
-RUN mkdir -p logs
-
-# Set environment variables
-ENV PYTHONPATH=/app
-ENV PORT=8001
-# Add .venv to PATH so Python uses installed packages
+# Place executables in the environment at the front of the path
+# Ref: https://docs.astral.sh/uv/guides/integration/docker/#using-the-environment
 ENV PATH="/app/.venv/bin:$PATH"
+
+# Compile bytecode
+# Ref: https://docs.astral.sh/uv/guides/integration/docker/#compiling-bytecode
+ENV UV_COMPILE_BYTECODE=1
+
+# uv Cache
+# Ref: https://docs.astral.sh/uv/guides/integration/docker/#caching
+ENV UV_LINK_MODE=copy
+
+# Install dependencies
+# Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
+RUN --mount=type=cache,target=/root/.cache/uv \
+  --mount=type=bind,source=uv.lock,target=uv.lock \
+  --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+  uv sync --frozen --no-install-project
+
+ENV PYTHONPATH=/app
+
+COPY ./pyproject.toml ./uv.lock /app/
+
+COPY ./src/ansari_whatsapp /app/ansari_whatsapp
+
+# Sync the project
+# Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
+RUN --mount=type=cache,target=/root/.cache/uv \
+  uv sync
 
 # Run the application
 CMD ["python", "src/ansari_whatsapp/app/main.py"]

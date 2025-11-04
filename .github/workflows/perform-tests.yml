@@ -7,8 +7,12 @@ on:
   # Trigger the workflow on push or pull request events
   push:
     branches: [ "main", "develop" ]
-  pull_request:
-    branches: [ "main", "develop" ]
+  # Can't run this on PRs from forked repo to upstream repo due to secrets not being passed.
+  #   Details: 
+  #   * https://stackoverflow.com/questions/66113900/github-actions-not-receiving-secrets
+  #   * https://github.com/orgs/community/discussions/50161
+  # pull_request:
+  #   branches: [ "main", "develop" ]
   # Allow other workflows to trigger this workflow
   workflow_call:
 
@@ -21,18 +25,24 @@ jobs:
     environment: gh-actions-staging-env
 
     env:
+      ########## Deployment settings ##########
+      DEPLOYMENT_TYPE: ${{ vars.DEPLOYMENT_TYPE || 'testing' }}
+
       ########## ansari-backend's settings ##########
       BACKEND_SERVER_URL: ${{ vars.BACKEND_SERVER_URL }}
 
       ########### Meta Business API settings ###########
       META_BUSINESS_PHONE_NUMBER_ID: ${{ secrets.META_BUSINESS_PHONE_NUMBER_ID }}
       META_ACCESS_TOKEN_FROM_SYS_USER: ${{ secrets.META_ACCESS_TOKEN_FROM_SYS_USER}}
-      META_WEBHOOK_VERIFY_TOKEN: ${{ secrets.META_WEBHOOK_VERIFY_TOKEN }}
+      META_WEBHOOK_VERIFY_TOKEN: ${{ secrets.META_WEBHOOK_VERIFY_TOKEN || 'test_verify_token' }}
+      META_ANSARI_APP_SECRET: ${{ secrets.META_ANSARI_APP_SECRET || 'test_app_secret' }}
 
       ########### ansari-whatsapp's settings ##########
-      DEPLOYMENT_TYPE: ${{ vars.DEPLOYMENT_TYPE }}
       WHATSAPP_DEV_PHONE_NUM: ${{ secrets.WHATSAPP_DEV_PHONE_NUM}}
       WHATSAPP_DEV_MESSAGE_ID: ${{ secrets.WHATSAPP_DEV_MESSAGE_ID}}
+      WHATSAPP_SERVICE_API_KEY: ${{ secrets.WHATSAPP_SERVICE_API_KEY}}
+
+      ########### Mock settings ###########
       # If MOCK_META_API is true, then all above META_*/WHATSAPP_* settings are unused during tests  
       MOCK_META_API: ${{ vars.MOCK_META_API || 'false' }}
       MOCK_ANSARI_CLIENT: ${{ vars.MOCK_ANSARI_CLIENT || 'false' }}
@@ -71,15 +81,3 @@ jobs:
     - name: Test with pytest
       run: |
         pytest tests/test_whatsapp_service.py -v -s --tb=short --color=yes
-
-
-    # Optional: Upload test results as artifacts
-    - name: Upload test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: test-results
-        path: |
-          tests/detailed_test_results_whatsapp_service.json
-          tests/test_runner.log
-        retention-days: 30

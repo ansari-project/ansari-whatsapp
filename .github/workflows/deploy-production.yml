@@ -60,6 +60,10 @@ jobs:
           META_BUSINESS_PHONE_NUMBER_ID: ${{ format('{0}{1}', vars.SSM_ROOT, 'meta-business-phone-number-id') }}
           META_WEBHOOK_VERIFY_TOKEN: ${{ format('{0}{1}', vars.SSM_ROOT, 'meta-webhook-verify-token') }}
           META_API_VERSION: ${{ format('{0}{1}', vars.SSM_ROOT, 'meta-api-version') }}
+          META_APP_SECRET: ${{ format('{0}{1}', vars.SSM_ROOT, 'meta-app-secret') }}
+
+          # Service-to-Service Authentication
+          WHATSAPP_SERVICE_API_KEY: ${{ format('{0}{1}', vars.SSM_ROOT, 'whatsapp-service-api-key') }}
 
           # Application Settings
           WHATSAPP_CHAT_RETENTION_HOURS: ${{ format('{0}{1}', vars.SSM_ROOT, 'whatsapp-chat-retention-hours') }}
@@ -88,6 +92,8 @@ jobs:
             META_BUSINESS_PHONE_NUMBER_ID
             META_WEBHOOK_VERIFY_TOKEN
             META_API_VERSION
+            META_APP_SECRET
+            WHATSAPP_SERVICE_API_KEY
             WHATSAPP_CHAT_RETENTION_HOURS
             WHATSAPP_MESSAGE_AGE_THRESHOLD_SECONDS
             WHATSAPP_UNDER_MAINTENANCE

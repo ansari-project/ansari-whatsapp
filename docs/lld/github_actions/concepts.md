@@ -117,6 +117,34 @@ A reusable unit of code that performs a common task. Actions can be from GitHub,
 - Format: `owner/repo@version`
 - Browse actions at [GitHub Marketplace](https://github.com/marketplace?type=actions)
 
+**AWS App Runner Deploy Action Example:**
+
+The `awslabs/amazon-app-runner-deploy@main` action supports passing environment variables to your deployed service:
+
+```yaml
+- name: Deploy to App Runner
+  uses: awslabs/amazon-app-runner-deploy@main
+  env:
+    # Regular environment variable
+    BACKEND_URL: https://api.example.com
+    # SSM Parameter Store path for secrets
+    API_TOKEN_SSM: /myapp/prod/api-token
+  with:
+    service: my-service
+    image: my-image:latest
+    access-role-arn: ${{ secrets.ROLE_ARN }}
+    copy-env-vars: |
+      BACKEND_URL
+    copy-secret-env-vars: |
+      API_TOKEN_SSM
+```
+
+- **`copy-env-vars`**: Lists environment variable names (defined in the `env:` block) to pass as regular environment variables to the App Runner service. These values are visible in logs.
+- **`copy-secret-env-vars`**: Lists environment variable names whose **values must be AWS Systems Manager Parameter Store paths** (e.g., `/myapp/stage/secret-name`). App Runner will retrieve the actual secret values from SSM at runtime. These are masked in logs for security.
+  - Source: [action-configuration.ts](https://github.com/awslabs/amazon-app-runner-deploy/blob/main/src/action-configuration.ts#L189-L213) - `getEnvironmentVariables()` function
+  - Source: [index.test.ts](https://github.com/awslabs/amazon-app-runner-deploy/blob/main/src/index.test.ts#L269-L300) - Test showing `TEST_SECRET_ENV_VAR: '/test/secret_env'` as SSM path
+  - Source: [client-apprunner-commands.ts](https://github.com/awslabs/amazon-app-runner-deploy/blob/main/src/client-apprunner-commands.ts#L70-L96) - How `RuntimeEnvironmentSecrets` are passed to App Runner
+
 ---
 
 ## Workflow Structure

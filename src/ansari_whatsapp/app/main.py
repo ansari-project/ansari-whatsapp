@@ -11,12 +11,19 @@ https://stackoverflow.com/questions/72894209/whatsapp-cloud-api-sending-old-mess
 https://www.perplexity.ai/search/explain-fastapi-s-backgroundta-rnpU7D19QpSxp2ZOBzNUyg
 """
 
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends
 from fastapi.responses import HTMLResponse, Response, JSONResponse
 from loguru import logger
 
 from ansari_whatsapp.services.whatsapp_conversation_manager import WhatsAppConversationManager
-from ansari_whatsapp.utils.whatsapp_webhook_parser import parse_webhook_payload
+from ansari_whatsapp.services.service_provider import get_ansari_client
+from ansari_whatsapp.services.ansari_client_real import AnsariClientReal
+from ansari_whatsapp.utils.whatsapp_webhook_utils import (
+    parse_meta_payload,
+    verify_meta_signature,
+    create_response_for_meta,
+)
 from ansari_whatsapp.utils.time_utils import is_message_too_old
 from ansari_whatsapp.utils.config import get_settings
 from ansari_whatsapp.utils.general_helpers import CORSMiddlewareWithLogging
@@ -32,68 +39,49 @@ from ansari_whatsapp.utils.app_logger import configure_logger
 # See: https://github.com/Delgan/loguru/issues/54#issuecomment-461724397
 configure_logger()
 
-# Helper function for webhook responses
-def create_webhook_response(
-    success: bool = True,
-    message: str = "OK",
-    status_code: int = 200,
-    error_code: str | None = None,
-    details: dict | None = None
-) -> Response:
+
+# Lifespan context manager for managing HTTP client lifecycle
+# References:
+# - https://fastapi.tiangolo.com/advanced/events/#lifespan
+# - https://www.python-httpx.org/async/#opening-and-closing-clients
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """
-    Create appropriate webhook response based on deployment environment.
+    Manage the lifecycle of HTTP clients and other resources.
 
-    In test environment: Returns proper HTTP status codes for testing
-    In production/staging/local: Always returns 200 for Meta compliance
+    This lifespan context manager ensures proper cleanup of resources like
+    HTTP connection pools when the application starts and shuts down.
 
-    Args:
-        success: Whether the operation was successful
-        message: Human-readable message
-        status_code: HTTP status code to use (only in test mode)
-        error_code: Machine-readable error code
-        details: Additional details to include in response
+    Startup:
+    - HTTP clients are created when first accessed via service provider
 
-    Returns:
-        Response: HTTP response appropriate for current environment
+    Shutdown:
+    - Close all HTTP clients to release connection pools
+    - Clean up any background tasks or resources
+
+    References:
+    - https://fastapi.tiangolo.com/advanced/events/#lifespan
+    - https://www.python-httpx.org/async/#opening-and-closing-clients
     """
-    settings = get_settings()
+    logger.info("Application startup: Initializing resources")
+    # Store client instance for cleanup
+    client = get_ansari_client()
 
-    # Create response body with structured information
-    response_body = {
-        "success": success,
-        "message": message,
-        "timestamp": int(__import__("time").time())
-    }
+    yield  # Application is running
 
-    if error_code:
-        response_body["error_code"] = error_code
-
-    if details:
-        response_body["details"] = details
-
-    # When ALWAYS_RETURN_OK_TO_META is False: return proper HTTP status codes (for testing)
-    # When ALWAYS_RETURN_OK_TO_META is True: always return 200 for Meta compliance
-    if not settings.ALWAYS_RETURN_OK_TO_META:
-        return JSONResponse(
-            content=response_body,
-            status_code=status_code if not success else 200
-        )
-
-    # Always return 200 for Meta compliance (production behavior)
-    # But still include structured response body for logging/debugging
-    return JSONResponse(
-        content=response_body,
-        status_code=200
-    )
+    # Cleanup on shutdown
+    logger.info("Application shutdown: Cleaning up resources")
+    if isinstance(client, AnsariClientReal):
+        await client.close()
+        logger.info("HTTP client connections closed")
 
 
-
-
-# Create FastAPI application
+# Create FastAPI application with lifespan management
 app = FastAPI(
     title="Ansari WhatsApp API",
     description="API for handling WhatsApp webhook requests for the Ansari service",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Add CORS middleware with logging
@@ -122,6 +110,9 @@ async def verification_webhook(request: Request) -> str | None:
 
     Returns:
         Optional[str]: The challenge string if verification is successful, otherwise raises an HTTPException.
+
+    References:
+        - https://developers.facebook.com/docs/graph-api/webhooks/getting-started#verification-requests
     """
     mode = request.query_params.get("hub.mode")
     verify_token = request.query_params.get("hub.verify_token")
@@ -140,7 +131,11 @@ async def verification_webhook(request: Request) -> str | None:
 
 
 @app.post("/whatsapp/v2")
-async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> Response:
+async def main_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    _: None = Depends(verify_meta_signature)
+) -> Response:
     """
     Handles the incoming WhatsApp webhook message from Meta's WhatsApp Business API.
 
@@ -148,10 +143,11 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
     It performs several validation and filtering steps before processing user messages:
 
     **Processing Flow:**
-    1. **Extract Message Details**: Parses the webhook payload to extract relevant information
+    1. **Verify Signature**: Validates X-Hub-Signature-256 header to ensure request is from Meta
+    2. **Extract Message Details**: Parses the webhook payload to extract relevant information
        (sender phone number, message type, message body, timestamps, etc.)
     
-    2. **Validation Checks** (returns early if conditions met):
+    3. **Validation Checks** (returns early if conditions met):
        - Verifies the webhook is for our WhatsApp business number
        - Filters out status messages (delivered, read, etc.)
        - Checks if service is under maintenance
@@ -160,7 +156,7 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
        - Verifies user registration status
        - Filters unsupported message types (non-text messages)
     
-    3. **Background Processing**:
+    4. **Background Processing**:
        - Starts typing indicator loop (shows user that bot is processing)
        - Processes text messages asynchronously via background tasks
     
@@ -196,11 +192,11 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
         - The staging "!d" prefix filter is a temporary workaround until dedicated test numbers
           are available for each environment.
     """
-    # Wait for the incoming webhook message to be received as JSON
-
+    # Step 1: Signature verification now handled by Depends(verify_meta_signature_dependency)
+    # Step 2: Parse the JSON payload
     data = await request.json()
-    
-    # Extract message details from the webhook payload using the standalone function
+
+    # Step 3: Extract message details from the webhook payload
     try:
         (
             is_status,
@@ -210,12 +206,12 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
             incoming_msg_body,
             message_id,
             message_unix_time,
-        ) = await parse_webhook_payload(data)
+        ) = await parse_meta_payload(data)
 
         # Check if this webhook is intended for our WhatsApp business phone number
         if not is_target_business_number:
             logger.debug("Ignoring webhook not intended for our WhatsApp business number")
-            return create_webhook_response(
+            return create_response_for_meta(
                 success=True,
                 message="Skipping, as this webhook is not intended for our WhatsApp business number",
                 status_code=200,
@@ -225,7 +221,7 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
         if is_status:
             logger.debug("Ignoring status update message (e.g., delivered, read)")
             # This is a status message, not a user message, so doesn't need processing
-            return create_webhook_response(
+            return create_response_for_meta(
                 success=True,
                 message="Status message processed (ignored)",
                 error_code="STATUS_MESSAGE"
@@ -234,7 +230,7 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
         logger.debug(f"Incoming whatsapp webhook message from {from_whatsapp_number}")
     except Exception as e:
         logger.exception(f"Error extracting message details: {e}")
-        return create_webhook_response(
+        return create_response_for_meta(
             success=False,
             message="Error processing webhook payload",
             status_code=400,
@@ -258,7 +254,7 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
             conversation_manager.send_whatsapp_message,
             "Ansari for WhatsApp is down for maintenance, please try again later or visit our website at https://ansari.chat.",
         )
-        return create_webhook_response(
+        return create_response_for_meta(
             success=False,
             message="Service under maintenance",
             status_code=503,
@@ -274,7 +270,7 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
     # NOTE: Obviously, this temp. solution will be removed when we get a dedicated testing number for staging testing.
     if get_settings().DEPLOYMENT_TYPE == "staging" and incoming_msg_body.get("body", "").startswith("!d "):
         logger.debug("Incoming message is meant for a dev who's testing locally now, so will not process it in staging...")
-        return create_webhook_response(
+        return create_response_for_meta(
             success=False,
             message="Message filtered for local development",
             status_code=202,
@@ -289,7 +285,7 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
     # Check if there are more than xx hours have passed from the user's message to the current time
     # If so, send a message to the user and return
     if is_message_too_old(message_unix_time):
-        return create_webhook_response(
+        return create_response_for_meta(
             success=False,
             message="Message too old, notified user",
             status_code=422,
@@ -303,7 +299,7 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
         background_tasks.add_task(
             conversation_manager.send_whatsapp_message, "Sorry, we couldn't register you to our database. Please try again later."
         )
-        return create_webhook_response(
+        return create_response_for_meta(
             success=False,
             message="User registration failed",
             status_code=500,
@@ -315,7 +311,7 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
         background_tasks.add_task(
             conversation_manager.handle_unsupported_message,
         )
-        return create_webhook_response(
+        return create_response_for_meta(
             success=False,
             message="Unsupported message type handled",
             status_code=415,
@@ -327,7 +323,7 @@ async def main_webhook(request: Request, background_tasks: BackgroundTasks) -> R
         conversation_manager.handle_text_message,
     )
 
-    return create_webhook_response(
+    return create_response_for_meta(
         success=True,
         message="Message processed successfully"
     )

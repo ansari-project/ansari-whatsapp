@@ -53,10 +53,13 @@ async def lifespan(app: FastAPI):
     HTTP connection pools when the application starts and shuts down.
 
     Startup:
-    - HTTP clients are created when first accessed via service provider
+    - Gets the singleton Ansari client instance (created on first access)
+    - This ensures the client is initialized before any requests arrive
 
     Shutdown:
-    - Close all HTTP clients to release connection pools
+    - Closes the singleton Ansari client to release connection pools
+    - Since get_ansari_client() returns a singleton, this closes the SAME instance
+      used by all request handlers throughout the application lifecycle
     - Clean up any background tasks or resources
 
     References:
@@ -64,16 +67,17 @@ async def lifespan(app: FastAPI):
     - https://www.python-httpx.org/async/#opening-and-closing-clients
     """
     logger.info("Application startup: Initializing resources")
-    # Store client instance for cleanup
+    # Get singleton client instance - this will be shared across all requests
     client = get_ansari_client()
+    logger.info(f"Ansari client singleton initialized: {type(client).__name__}")
 
     yield  # Application is running
 
-    # Cleanup on shutdown
+    # Cleanup on shutdown - close the singleton instance
     logger.info("Application shutdown: Cleaning up resources")
     if isinstance(client, AnsariClientReal):
         await client.close()
-        logger.info("HTTP client connections closed")
+        logger.info("HTTP client connections closed successfully")
 
 
 # Create FastAPI application with lifespan management

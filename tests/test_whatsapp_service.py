@@ -43,6 +43,7 @@ from loguru import logger
 
 from ansari_whatsapp.app.main import app
 from ansari_whatsapp.utils.config import get_settings
+from ansari_whatsapp.services.service_provider import reset_ansari_client
 from .test_utils import (
     log_test_result,
     format_payload_for_logging,
@@ -134,6 +135,25 @@ Option 3: Start the backend server
     yield
 
     # No teardown actions needed for this fixture
+
+
+@pytest.fixture(scope="function", autouse=True)
+def reset_client_singleton():
+    """Reset the Ansari client singleton before each test for proper isolation.
+
+    This fixture ensures that each test function gets a fresh Ansari client instance,
+    preventing state leakage between tests. This is important IN CASE:
+    - Tests modify environment variables (e.g., MOCK_ANSARI_CLIENT)
+    - Tests need different client configurations
+
+    The reset happens BEFORE each test runs, so the test gets a fresh singleton
+    based on the current environment configuration.
+    """
+    reset_ansari_client()
+    logger.debug("Test fixture: Ansari client singleton reset before test")
+    yield
+    # No cleanup needed after test - next test will reset again
+
 
 @pytest.fixture(scope="module")
 def settings():

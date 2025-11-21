@@ -42,24 +42,44 @@ This file contains all AWS CLI commands needed to set up the infrastructure for 
 
 This repository will store Docker images for ansari-whatsapp.
 
+**Command to match ansari-backend repository settings:**
+
 ```bash
-aws ecr create-repository --repository-name ansari-whatsapp \
-  --profile ansari --region us-west-2
+aws ecr create-repository \
+  --repository-name ansari-whatsapp \
+  --region us-west-2 \
+  --image-tag-mutability MUTABLE \
+  --image-scanning-configuration scanOnPush=false \
+  --encryption-configuration encryptionType=AES256 \
+  --profile ansari
 ```
 
 **Expected Output:**
 ```json
 {
     "repository": {
-        "repositoryArn": "arn:aws:ecr:us-west-2:<account-id>:repository/ansari-whatsapp",
-        "registryId": "<account-id>",
+        "repositoryArn": "arn:aws:ecr:us-west-2:AWS_ACCOUNT_ID:repository/ansari-whatsapp",
+        "registryId": "AWS_ACCOUNT_ID",
         "repositoryName": "ansari-whatsapp",
-        "repositoryUri": "<account-id>.dkr.ecr.us-west-2.amazonaws.com/ansari-whatsapp"
+        "repositoryUri": "AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/ansari-whatsapp",
+        "createdAt": "2025-11-18T17:55:11.647000+02:00",
+        "imageTagMutability": "MUTABLE",
+        "imageScanningConfiguration": {
+            "scanOnPush": false
+        },
+        "encryptionConfiguration": {
+            "encryptionType": "AES256"
+        }
     }
 }
 ```
 
 **Save the `repositoryUri`** - you'll need it for GitHub Secrets!
+
+**Verify Repository Creation:**
+```bash
+aws ecr describe-repositories --repository-names ansari-whatsapp --region us-west-2
+```
 
 ---
 

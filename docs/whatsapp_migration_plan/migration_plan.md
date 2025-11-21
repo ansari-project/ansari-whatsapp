@@ -98,8 +98,8 @@ This phase covers deploying ansari-whatsapp to AWS App Runner using the same inf
 - [ ] ECR Repository: `ansari-whatsapp`
 - [ ] SSM Parameters: `/app-runtime/ansari-whatsapp/staging/*`
 - [ ] SSM Parameters: `/app-runtime/ansari-whatsapp/production/*`
-- [ ] App Runner Service: `ansari-whatsapp-staging`
-- [ ] App Runner Service: `ansari-whatsapp-production`
+- [ ] App Runner Service: `ansari-staging-whatsapp`
+- [ ] App Runner Service: `ansari-production-whatsapp`
 
 **Specifications:**
 - Region: `us-west-2` (Oregon)

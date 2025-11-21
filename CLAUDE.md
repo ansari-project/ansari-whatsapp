@@ -211,6 +211,84 @@ Key environment variables (see `.env.example`):
 - Logging configured with Rich formatting and file rotation
 - Comprehensive test suite with mock clients for CI/CD
 
+## AWS Deployment
+
+**AWS Region:** `us-west-2` (Oregon)
+**AWS Account ID:** `AWS_ACCOUNT_ID`
+
+For complete deployment instructions, see the [AWS Deployment Documentation](./docs/lld/aws/):
+
+## ⚠️ CRITICAL SAFETY RULES
+
+**AWS Resource Deletion:**
+- **NEVER execute any commands that delete AWS resources** (ECR repositories, App Runner services, SSM parameters, S3 buckets, databases, etc.) without EXPLICIT user approval
+- **ALWAYS ask the user first** before running any `delete`, `remove`, `destroy`, or destructive commands
+- Examples of commands that require explicit approval:
+  - `aws ecr delete-repository`
+  - `aws apprunner delete-service`
+  - `aws ssm delete-parameter`
+  - `aws s3 rm` or `aws s3 rb`
+  - Any command with `--force` flag
+- When suggesting destructive operations, present them as options but DO NOT execute them
+- If the user asks to delete a resource, confirm which specific resource and get explicit "ok" or "yes" confirmation
+
+
+## Quick Links
+- **[Deployment Guide](./docs/lld/aws/deployment_guide.md)** - Complete deployment walkthrough
+- **[AWS CLI Commands](./docs/lld/aws/aws-cli.md)** - All AWS CLI commands for setup
+- **[GitHub Actions Setup](./docs/lld/aws/github_actions_setup.md)** - CI/CD configuration
+
+## Quick Reference
+
+**Deployment:**
+- Staging: Push to `develop` branch (or manually trigger workflow)
+- Production: Push to `main` branch (or manually trigger workflow)
+
+**Get App Runner URL (for Cloudflare CNAME):**
+```bash
+# List all App Runner services
+aws apprunner list-services --region us-west-2
+
+# Get specific service URL
+aws apprunner describe-service \
+  --service-arn YOUR_SERVICE_ARN \
+  --query 'Service.ServiceUrl' \
+  --output text \
+  --region us-west-2
+```
+
+**Fetch App Runner Logs (Windows/MSYS2):**
+```bash
+# Get logs from App Runner service (last 30 minutes)
+# Note: MSYS2_ARG_CONV_EXCL prevents Windows path conversion on log group name
+MSYS2_ARG_CONV_EXCL="*" aws logs tail "/aws/apprunner/SERVICE_NAME/SERVICE_ID/service" --region us-west-2 --since 30m
+
+# Example for staging:
+MSYS2_ARG_CONV_EXCL="*" aws logs tail "/aws/apprunner/ansari-staging-whatsapp/b0e5aa8e713c48a0845e676f4f60e048/service" --region us-west-2 --since 30m
+
+# Adjust time window as needed: --since 1h, --since 2h, --since 1d
+```
+
+**Get App Runner Service Status:**
+```bash
+# Check service status
+aws apprunner describe-service \
+  --service-arn YOUR_SERVICE_ARN \
+  --region us-west-2 \
+  --query 'Service.Status' \
+  --output text
+
+# List recent operations to find failure reasons
+aws apprunner list-operations \
+  --service-arn YOUR_SERVICE_ARN \
+  --region us-west-2
+```
+
+**Key Resources:**
+- ECR: `AWS_ACCOUNT_ID.dkr.ecr.us-west-2.amazonaws.com/ansari-whatsapp`
+- App Runner Staging: `ansari-staging-whatsapp`
+- App Runner Production: `ansari-production-whatsapp`
+
 ## Recent Changes
 - Refactored all tests to use pytest + TestClient pattern
 - Added comprehensive streaming endpoint testing

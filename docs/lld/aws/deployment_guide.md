@@ -74,6 +74,8 @@ AWS App Runner (ansari-backend)
 - It communicates with ansari-backend via HTTP API calls
 - Both services deployed independently on AWS App Runner
 - Secrets managed via AWS Systems Manager Parameter Store
+- **AWS Region**: us-west-2 (Oregon)
+- **AWS Account ID**: AWS_ACCOUNT_ID
 
 ---
 
@@ -94,8 +96,8 @@ These IAM roles already exist and we'll use them:
 | Resource | Name | Purpose |
 |----------|------|---------|
 | ECR Repository | `ansari-whatsapp` | Store Docker images |
-| App Runner Service (Staging) | `ansari-whatsapp-staging` | Staging environment |
-| App Runner Service (Production) | `ansari-whatsapp-production` | Production environment |
+| App Runner Service (Staging) | `ansari-staging-whatsapp` | Staging environment |
+| App Runner Service (Production) | `ansari-production-whatsapp` | Production environment |
 | SSM Parameters | `/app-runtime/ansari-whatsapp/staging/*` | Staging environment variables |
 | SSM Parameters | `/app-runtime/ansari-whatsapp/production/*` | Production environment variables |
 
@@ -203,21 +205,67 @@ Follow the detailed instructions in [github_actions_setup.md](./github_actions_s
 3. Monitor and wait for completion
 4. Note the production App Runner URL
 
-### Step 4: Update Meta Webhook URL
+### Step 4: Get App Runner URL for Cloudflare
 
-Once deployed, you need to tell Meta about the new webhook URL:
+After successful deployment, you need to get the App Runner URL to configure Cloudflare CNAME records.
+
+**Method 1: From AWS Console**
+1. Go to: https://console.aws.amazon.com/apprunner/home?region=us-west-2
+2. Click on `ansari-staging-whatsapp` or `ansari-production-whatsapp`
+3. Copy the **Default domain** (e.g., `xxxxxxxxxx.us-west-2.awsapprunner.com`)
+
+**Method 2: From AWS CLI**
+```bash
+# For staging
+aws apprunner describe-service \
+  --service-arn arn:aws:apprunner:us-west-2:AWS_ACCOUNT_ID:service/ansari-staging-whatsapp/YOUR_SERVICE_ID \
+  --query 'Service.ServiceUrl' \
+  --output text \
+  --region us-west-2
+
+# For production
+aws apprunner describe-service \
+  --service-arn arn:aws:apprunner:us-west-2:AWS_ACCOUNT_ID:service/ansari-production-whatsapp/YOUR_SERVICE_ID \
+  --query 'Service.ServiceUrl' \
+  --output text \
+  --region us-west-2
+```
+
+**Method 3: From GitHub Actions Logs**
+After deployment workflow completes, check the final step "App Runner URL" in the logs.
+
+**Send to Your Co-Developer:**
+```
+App Runner URL: xxxxxxxxxx.us-west-2.awsapprunner.com
+Subdomain: whatsapp (or your preferred subdomain)
+Environment: staging (or production)
+Port: 8001
+```
+
+They will configure Cloudflare CNAME record:
+```
+Type: CNAME
+Name: whatsapp
+Target: xxxxxxxxxx.us-west-2.awsapprunner.com
+Proxy: Enabled (orange cloud in Cloudflare)
+```
+
+### Step 5: Update Meta Webhook URL
+
+Once Cloudflare is configured, update Meta to use the custom domain:
 
 **Current Setup (Local Development):**
 - Webhook URL: `https://<ZROK_TOKEN>.share.zrok.io/whatsapp/v2`
 
-**New Setup (Production):**
-- Webhook URL: `https://<app-runner-url>/whatsapp/v2`
+**New Setup (Production via Cloudflare):**
+- Webhook URL: `https://whatsapp.ansari.chat/whatsapp/v2`
+- Webhook URL for staging: `https://staging-whatsapp.ansari.chat/whatsapp/v2`
 
 **How to Update:**
 1. Go to [Meta App Dashboard](https://developers.facebook.com/apps/)
 2. Select your WhatsApp app
 3. Navigate to WhatsApp → Configuration
-4. Update Callback URL to: `https://<your-app-runner-url>/whatsapp/v2`
+4. Update Callback URL to: `https://whatsapp.ansari.chat/whatsapp/v2`
 5. Verify token should remain the same (stored in SSM)
 6. Click "Verify and Save"
 

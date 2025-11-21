@@ -93,7 +93,7 @@ Two GitHub Actions workflows handle deployments:
 1. Builds Docker image with uv
 2. Tags image with git commit SHA
 3. Pushes to ECR `ansari-whatsapp` repository
-4. Deploys to `ansari-whatsapp-staging` App Runner service
+4. Deploys to `ansari-staging-whatsapp` App Runner service
 5. Injects environment variables from SSM path: `/app-runtime/ansari-whatsapp/staging/*`
 
 **Typical use case:**
@@ -109,7 +109,7 @@ Two GitHub Actions workflows handle deployments:
 
 **What it does:**
 1. Same build and push process as staging
-2. Deploys to `ansari-whatsapp-production` App Runner service
+2. Deploys to `ansari-production-whatsapp` App Runner service
 3. Injects environment variables from SSM path: `/app-runtime/ansari-whatsapp/production/*`
 
 **Typical use case:**
@@ -221,7 +221,7 @@ jobs:
       - name: Deploy to App Runner
         uses: awslabs/amazon-app-runner-deploy@main
         with:
-          service: ansari-whatsapp-staging
+          service: ansari-staging-whatsapp
           image: ${{ steps.build-image.outputs.image }}
           access-role-arn: ${{ secrets.SERVICE_ROLE_ARN }}
           instance-role-arn: ${{ secrets.INSTANCE_ROLE_ARN }}
@@ -236,7 +236,7 @@ jobs:
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
-| `service` | `ansari-whatsapp-staging` or `ansari-whatsapp-production` | App Runner service name |
+| `service` | `ansari-staging-whatsapp` or `ansari-production-whatsapp` | App Runner service name |
 | `cpu` | `1` | Number of vCPUs (1 = 1 vCPU) |
 | `memory` | `2` | Memory in GB |
 | `port` | `8001` | Container port (must match Dockerfile EXPOSE) |
@@ -284,7 +284,7 @@ You can manually trigger deployments without pushing code:
 ### AWS Console
 
 1. Go to AWS Console → App Runner
-2. Select your service (`ansari-whatsapp-staging` or `ansari-whatsapp-production`)
+2. Select your service (`ansari-staging-whatsapp` or `ansari-production-whatsapp`)
 3. Click **Deployments** tab
 4. See deployment status and history
 

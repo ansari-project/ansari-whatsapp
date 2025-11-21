@@ -81,7 +81,7 @@ Running Service (with SSM secrets injected)
 **AWS Resources:**
 - Region: `us-west-2` (Oregon)
 - ECR Repository: `ansari-whatsapp`
-- App Runner Services: `ansari-whatsapp-staging`, `ansari-whatsapp-production`
+- App Runner Services: `ansari-staging-whatsapp`, `ansari-production-whatsapp`
 - SSM Paths: `/app-runtime/ansari-whatsapp/staging/*`, `/app-runtime/ansari-whatsapp/production/*`
 
 **Reused IAM Roles (from ansari-backend):**

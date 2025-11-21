@@ -14,7 +14,7 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    environment: staging-aws
+    environment: gh-actions-staging-env
     # Only run if tests passed or if manually triggered
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
 
@@ -75,7 +75,7 @@ jobs:
           ORIGINS: ${{ format('{0}{1}', vars.SSM_ROOT, 'origins') }}
 
         with:
-          service: ansari-whatsapp-staging
+          service: ansari-staging-whatsapp
           image: ${{ steps.build-image.outputs.image }}
           access-role-arn: ${{ secrets.SERVICE_ROLE_ARN }}
           region: ${{ secrets.AWS_REGION }}

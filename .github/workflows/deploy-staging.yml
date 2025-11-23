@@ -51,9 +51,12 @@ jobs:
         id: deploy-apprunner
         uses: awslabs/amazon-app-runner-deploy@main
         env:
+          # Environment Configuration
+          DEPLOYMENT_TYPE: ${{ format('{0}{1}', vars.SSM_ROOT, 'deployment-type') }}
+          LOGGING_LEVEL: ${{ format('{0}{1}', vars.SSM_ROOT, 'logging-level') }}
+
           # Backend Integration
           BACKEND_SERVER_URL: ${{ format('{0}{1}', vars.SSM_ROOT, 'backend-server-url') }}
-          DEPLOYMENT_TYPE: ${{ format('{0}{1}', vars.SSM_ROOT, 'deployment-type') }}
 
           # Meta/WhatsApp Credentials
           META_ACCESS_TOKEN_FROM_SYS_USER: ${{ format('{0}{1}', vars.SSM_ROOT, 'meta-access-token-from-sys-user') }}
@@ -71,7 +74,7 @@ jobs:
           WHATSAPP_UNDER_MAINTENANCE: ${{ format('{0}{1}', vars.SSM_ROOT, 'whatsapp-under-maintenance') }}
 
           # Operational Settings
-          LOGGING_LEVEL: ${{ format('{0}{1}', vars.SSM_ROOT, 'logging-level') }}
+          ALWAYS_RETURN_OK_TO_META: ${{ format('{0}{1}', vars.SSM_ROOT, 'always-return-ok-to-meta') }}
           ORIGINS: ${{ format('{0}{1}', vars.SSM_ROOT, 'origins') }}
 
         with:
@@ -83,9 +86,10 @@ jobs:
           memory: 2
           port: 8001
           wait-for-service-stability-seconds: 1200
-          copy-env-vars: |
-            DEPLOYMENT_TYPE
+          # See docs/lld/aws/github_actions_setup.md for copy-env-vars vs copy-secret-env-vars behavior
           copy-secret-env-vars: |
+            DEPLOYMENT_TYPE
+            LOGGING_LEVEL
             BACKEND_SERVER_URL
             META_ACCESS_TOKEN_FROM_SYS_USER
             META_BUSINESS_PHONE_NUMBER_ID
@@ -97,7 +101,6 @@ jobs:
             WHATSAPP_MESSAGE_AGE_THRESHOLD_SECONDS
             WHATSAPP_UNDER_MAINTENANCE
             ALWAYS_RETURN_OK_TO_META
-            LOGGING_LEVEL
             ORIGINS
           instance-role-arn: ${{ secrets.INSTANCE_ROLE_ARN }}
 

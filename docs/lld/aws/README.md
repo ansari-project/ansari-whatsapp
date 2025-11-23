@@ -1,80 +1,79 @@
 # AWS Deployment Documentation
 
-This directory contains all documentation and configuration files needed to deploy ansari-whatsapp to AWS App Runner.
+This directory contains documentation for deploying ansari-whatsapp to AWS App Runner.
+
+***TOC:***
+
+- [AWS Deployment Documentation](#aws-deployment-documentation)
+  - [📚 Documentation Files](#-documentation-files)
+    - [concepts.md](#conceptsmd)
+    - [setup\_history.md](#setup_historymd)
+  - [🚀 Quick Start](#-quick-start)
+  - [🔍 Environment Variable Tracking](#-environment-variable-tracking)
+  - [💡 Key Resources](#-key-resources)
+  - [📋 Quick Reference](#-quick-reference)
+
 
 ## 📚 Documentation Files
 
-### [deployment_guide.md](./deployment_guide.md)
-**Start here!** Complete deployment walkthrough including:
-- Architecture overview and service specifications
-- Prerequisites and resource inventory
-- Step-by-step deployment instructions
-- Environment configuration details
-- Validation procedures and testing
-- Troubleshooting common issues
+### [concepts.md](./concepts.md)
+**Start here to understand AWS deployment architecture.**
 
-### [aws-cli.md](./aws-cli.md)
-All AWS CLI commands you'll need:
-- Create ECR repository
-- Set up SSM parameters (staging & production)
-- Verify resources
-- Update parameters
-- Get IAM role ARNs
+Learn about:
+- Deployment pipeline and service architecture
+- AWS services used (ECR, App Runner, SSM, IAM)
+- IAM roles and permissions
+- Environment variable management (`copy-env-vars` vs `copy-secret-env-vars`)
+- Docker image tagging strategy
+- Resource specifications
 
-### [github_actions_setup.md](./github_actions_setup.md)
-GitHub configuration guide:
-- Required GitHub Secrets
-- Workflow explanations
-- How deployments work
-- Monitoring and troubleshooting
+**Read this if:** You're new to the project or want to understand how AWS deployment works.
 
-### [instance-role-parameters-access.json](./instance-role-parameters-access.json)
-IAM policy document for App Runner instance role to access SSM Parameter Store.
+---
+
+### [setup_history.md](./setup_history.md)
+**Step-by-step commands to replicate the entire AWS deployment setup.**
+
+Includes:
+- Prerequisites (AWS CLI, GitHub CLI installation)
+- Phase 1: AWS Infrastructure (ECR, SSM, IAM)
+- Phase 2: GitHub Actions Configuration (secrets, variables, environments)
+- Phase 3: First Deployment (staging and production)
+- Phase 4: Ongoing Operations (updates, monitoring, rollbacks)
+- Cleanup commands
+
+**Read this if:** You need to set up AWS deployment from scratch or troubleshoot an existing setup.
+
+---
 
 ## 🚀 Quick Start
 
-1. **Read the deployment guide**: Start with [deployment_guide.md](./deployment_guide.md) for context
-2. **Run AWS CLI commands**: Follow [aws-cli.md](./aws-cli.md) to create resources
-3. **Configure GitHub**: Follow [github_actions_setup.md](./github_actions_setup.md) to add secrets
-4. **Deploy**: Push to `develop` branch for staging, `main` for production
+**For Newcomers:**
+1. Read [concepts.md](./concepts.md) to understand the architecture
+2. Review [setup_history.md](./setup_history.md) to see how everything was configured
 
-## 🏗️ Architecture Summary
+**For Setup/Deployment:**
+1. Follow [setup_history.md](./setup_history.md) Phase 1-2 to create AWS resources
+2. Follow Phase 3 to deploy
+3. Use Phase 4 for ongoing operations
 
-```
-GitHub (develop/main branch)
-        ↓
-GitHub Actions Workflow
-        ↓
-Docker Build (with uv)
-        ↓
-Amazon ECR
-        ↓
-AWS App Runner
-        ↓
-Running Service (with SSM secrets injected)
-```
+**For GitHub Actions Integration:**
+- See [../github_actions/concepts.md](../github_actions/concepts.md) for general CI/CD workflows
+- See [../github_actions/setup_history.md](../github_actions/setup_history.md) for GitHub-specific configuration
 
-## 📋 Deployment Checklist
+---
 
-### Phase 4.1: AWS Resources
-- [ ] Create ECR repository `ansari-whatsapp`
-- [ ] Add SSM parameters for staging
-- [ ] Add SSM parameters for production
-- [ ] Verify IAM roles exist
+## 🔍 Environment Variable Tracking
 
-### Phase 4.2: GitHub Configuration
-- [ ] Add AWS credentials to GitHub Secrets
-- [ ] Add IAM role ARNs to secrets
-- [ ] Add SSM root paths to secrets
-- [ ] Verify deployment workflows exist
+Environment variables are defined in multiple locations. To track where a specific env var is set:
 
-### Phase 4.3: Deployment
-- [ ] Push to `develop` → triggers staging deployment
-- [ ] Test staging service
-- [ ] Push to `main` → triggers production deployment
-- [ ] Update Meta webhook URL
-- [ ] Test production service
+1. **Check `src/ansari_whatsapp/utils/config.py`**: See field definitions, `@field_validator` modifications, and `@property` derivations
+2. **Check deployment workflows** (`.github/workflows/deploy-*.yml`): See if hardcoded (e.g., `DEPLOYMENT_TYPE: staging`) or fetched from SSM (e.g., `BACKEND_SERVER_URL: ${{ format(...) }}`)
+3. **Check runtime modifications**: Search codebase for `os.environ["VAR_NAME"]` assignments
 
+See [concepts.md - Environment Variable Management](./concepts.md#environment-variable-management) for details on how SSM parameters are resolved.
+
+---
 
 ## 💡 Key Resources
 
@@ -91,4 +90,24 @@ Running Service (with SSM secrets injected)
 
 ---
 
-**Ready to deploy? Start with [deployment_guide.md](./deployment_guide.md)! 🚀**
+## 📋 Quick Reference
+
+**Common AWS CLI Commands:**
+```bash
+# List all App Runner services (to find service ARNs for subsequent commands)
+aws apprunner list-services --region us-west-2
+
+# Get service URL
+aws apprunner describe-service --service-arn <arn> --query 'Service.ServiceUrl' --output text --region us-west-2
+
+# View logs (Windows/MSYS2)
+MSYS2_ARG_CONV_EXCL="*" aws logs tail "/aws/apprunner/SERVICE_NAME/SERVICE_ID/service" --region us-west-2 --since 30m
+
+# Update SSM parameter
+aws ssm put-parameter --name "<path>" --value "<new-value>" --overwrite --region us-west-2
+
+# Check service status
+aws apprunner describe-service --service-arn <arn> --query 'Service.Status' --output text --region us-west-2
+```
+
+See [setup_history.md - Quick Reference](./setup_history.md#quick-reference) for more commands.

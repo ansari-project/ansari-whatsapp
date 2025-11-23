@@ -212,6 +212,8 @@ on:
 
 ## Environment Variables
 
+**Note:** Environment variables are stored in multiple locations (GitHub Secrets/Variables, AWS SSM, and `.env` files). See [AWS Concepts - Why Environment Variables Exist in Multiple Locations](../../aws/concepts.md#why-environment-variables-exist-in-multiple-locations) to understand why this duplication exists and how each location is used.
+
 ### Accessing Secrets
 
 Secrets are encrypted values stored in GitHub Settings.
@@ -373,7 +375,86 @@ jobs:
 
 ---
 
+## Deployment Workflows
+
+### ansari-whatsapp Deployment Workflows
+
+The project has three main workflows:
+
+**1. Test Workflow (`perform-tests.yml`)**
+- Triggers: Push/PR to `main` or `develop`
+- Runs pytest tests
+- Uploads test results as artifacts
+
+**2. Staging Deployment (`deploy-staging.yml`)**
+- Triggers: After tests pass on `develop` branch OR manual trigger
+- Uses `workflow_run` to wait for test completion
+- Builds Docker image → Pushes to ECR → Deploys to `ansari-staging-whatsapp`
+- Environment: `gh-actions-staging-env`
+
+**3. Production Deployment (`deploy-production.yml`)**
+- Triggers: After tests pass on `main` branch OR manual trigger
+- Uses `workflow_run` to wait for test completion
+- Builds Docker image → Pushes to ECR → Deploys to `ansari-production-whatsapp`
+- Environment: `gh-actions-production-env`
+
+### workflow_run Trigger
+
+The deployment workflows use `workflow_run` to wait for tests to pass before deploying:
+
+```yaml
+on:
+  workflow_run:
+    workflows: ["Ansari WhatsApp Pytests"]
+    types:
+      - completed
+    branches:
+      - develop  # or main for production
+```
+
+**How it works:**
+1. Developer pushes to `develop`
+2. Test workflow runs
+3. If tests pass, deployment workflow triggers automatically
+4. If tests fail, deployment is skipped
+
+**Benefits:**
+- Never deploy broken code
+- Automatic deployment on successful tests
+- Can still manually trigger deployment if needed
+
+### Deployment Workflow Structure
+
+```yaml
+name: Staging Deployment (AWS App Runner)
+
+on:
+  workflow_run:
+    workflows: ["Ansari WhatsApp Pytests"]
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: gh-actions-staging-env  # Use environment-level secrets
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout
+      - name: Configure AWS credentials
+      - name: Login to Amazon ECR
+      - name: Build, tag, and push image
+      - name: Deploy to App Runner  # AWS-specific deployment
+```
+
+For AWS-specific deployment details, see [AWS Concepts - Deployment Pipeline](../../aws/concepts.md#deployment-pipeline).
+
+---
+
 **External Resources:**
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
 - [GitHub Actions Marketplace](https://github.com/marketplace?type=actions)
 - [Workflow Syntax Reference](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions)
+- [workflow_run Event](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_run)

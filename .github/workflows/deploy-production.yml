@@ -86,7 +86,7 @@ jobs:
           memory: 2
           port: 8001
           wait-for-service-stability-seconds: 1200
-          # See docs/lld/aws/github_actions_setup.md for copy-env-vars vs copy-secret-env-vars behavior
+          # See docs/lld/aws/concepts.md for copy-env-vars vs copy-secret-env-vars behavior
           copy-secret-env-vars: |
             DEPLOYMENT_TYPE
             LOGGING_LEVEL

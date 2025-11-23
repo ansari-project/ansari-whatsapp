@@ -1,10 +1,10 @@
-# GitHub Actions Setup Commands
+# GitHub Actions Setup History
 
-This guide provides all the commands used to set up GitHub Actions for ansari-whatsapp. Use these commands to replicate the setup or make modifications.
+This document provides step-by-step commands to replicate the GitHub Actions configuration for ansari-whatsapp. Follow these steps to set up CI/CD from scratch.
 
 ***TOC:***
 
-- [GitHub Actions Setup Commands](#github-actions-setup-commands)
+- [GitHub Actions Setup History](#github-actions-setup-history)
   - [Prerequisites](#prerequisites)
     - [Install GitHub CLI](#install-github-cli)
     - [Authenticate with GitHub](#authenticate-with-github)
@@ -156,8 +156,81 @@ gh variable set MOCK_ANSARI_CLIENT --body "false"
 
 ---
 
+## Deployment Workflows
+
+The project has three GitHub Actions workflows configured:
+
+### 1. Test Workflow (`.github/workflows/perform-tests.yml`)
+
+**Already configured.** Runs on push/PR to `main` or `develop`.
+
+**What it does:**
+- Checks out code
+- Installs uv and dependencies
+- Runs pytest tests
+- Uploads test results as artifacts
+
+### 2. Staging Deployment (`.github/workflows/deploy-staging.yml`)
+
+**Already configured.** Deploys to `ansari-staging-whatsapp` on AWS App Runner.
+
+**Trigger conditions:**
+- Automatically after tests pass on `develop` branch
+- Manual trigger via GitHub Actions UI
+
+**What it does:**
+1. Waits for test workflow to complete successfully
+2. Builds Docker image with commit SHA tag
+3. Pushes image to AWS ECR
+4. Deploys to App Runner staging service
+5. Injects environment variables from SSM Parameter Store
+
+**Uses environment:** `gh-actions-staging-env` (configured in Steps 3-4 above)
+
+### 3. Production Deployment (`.github/workflows/deploy-production.yml`)
+
+**Already configured.** Deploys to `ansari-production-whatsapp` on AWS App Runner.
+
+**Trigger conditions:**
+- Automatically after tests pass on `main` branch
+- Manual trigger via GitHub Actions UI
+
+**What it does:**
+1. Waits for test workflow to complete successfully
+2. Builds Docker image with commit SHA tag
+3. Pushes image to AWS ECR
+4. Deploys to App Runner production service
+5. Injects environment variables from SSM Parameter Store
+
+**Uses environment:** `gh-actions-production-env` (configured in Steps 3-4 above)
+
+### Manual Deployment Trigger
+
+To manually trigger a deployment without pushing code:
+
+**From GitHub UI:**
+1. Go to **Actions** tab in the repository
+2. Select "Staging Deployment" or "Production Deployment" workflow
+3. Click **Run workflow**
+4. Select the branch (develop for staging, main for production)
+5. Click **Run workflow** button
+
+**Use cases:**
+- SSM parameter updated, need to redeploy
+- Emergency rollback to a specific commit
+- Testing a feature branch
+- Hotfix deployment
+
+For AWS-specific deployment setup, see [AWS Setup History](../../aws/setup_history.md).
+
+---
 
 ## Related Documentation
+
+**Internal:**
+- [GitHub Actions Concepts](./concepts.md) - Understanding workflows, secrets, and environments
+- [AWS Setup History](../../aws/setup_history.md) - AWS infrastructure setup commands
+- [AWS Concepts](../../aws/concepts.md) - Understanding AWS deployment architecture
 
 **External Resources:**
 - [GitHub CLI Documentation](https://cli.github.com/manual/)

@@ -3,7 +3,6 @@
 
 import os
 import sys
-from typing import Any, Callable
 
 from loguru import logger
 
@@ -34,6 +33,11 @@ def configure_logger():
     # Get settings
     settings = get_settings()
 
+    # Determine if we should use colorized output
+    # AWS CloudWatch doesn't render ANSI color codes properly, so disable colors for staging/production
+    is_aws_deployment = settings.DEPLOYMENT_TYPE in ["staging", "production"]
+    enable_colors = not is_aws_deployment
+
     # Filter for test files only (when LOG_TEST_FILES_ONLY is True)
     def log_filter(record):
         """Filter logs based on test file settings.
@@ -49,19 +53,27 @@ def configure_logger():
 
         return True
 
-    # Add console handler for terminal output
-    logger.add(
-        sys.stderr,
-        format=(
+    # Choose format based on deployment type
+    if is_aws_deployment:
+        # Plain text format for AWS CloudWatch (no color codes)
+        log_format = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {file}:{line} [{function}()] | {message}"
+    else:
+        # Colorized format for local development
+        log_format = (
             "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
             "<level>{level: <4}</level> | "
             "<cyan>{file}</cyan>:<cyan>{line}</cyan> "
             "<blue>[{function}()]</blue> | "
             "<level>{message}</level>"
-        ),
+        )
+
+    # Add console handler for terminal output
+    logger.add(
+        sys.stderr,
+        format=log_format,
         level=settings.LOGGING_LEVEL.upper(),
         enqueue=True,
-        colorize=True,
+        colorize=enable_colors,
         backtrace=False,
         diagnose=False,
         filter=log_filter,

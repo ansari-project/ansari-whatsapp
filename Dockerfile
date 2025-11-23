@@ -36,7 +36,7 @@ ENV PYTHONPATH=/app
 # the line below uses the second option for clarity
 COPY ./pyproject.toml ./uv.lock /app/
 
-COPY ./src/ansari_whatsapp /app/ansari_whatsapp
+COPY ./src /app/src/
 
 # Sync the project
 # Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
@@ -44,4 +44,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
   uv sync
 
 # Run the application
-CMD ["python", "ansari_whatsapp/app/main.py"]
+CMD ["python", "src/ansari_whatsapp/app/main.py"]

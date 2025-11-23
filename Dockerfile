@@ -29,9 +29,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 ENV PYTHONPATH=/app
 
+# Copy project files into the container
+# Side ntoe: we can write the destination path in 2 ways:
+# - ./ == relative to WORKDIR (/app/), so ./ == /app/
+# - /app/ == absolute path to /app/ (same result, but explicit)
+# the line below uses the second option for clarity
 COPY ./pyproject.toml ./uv.lock /app/
 
-COPY ./src/ansari_whatsapp /app/ansari_whatsapp
+COPY ./src /app/src/
 
 # Sync the project
 # Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers

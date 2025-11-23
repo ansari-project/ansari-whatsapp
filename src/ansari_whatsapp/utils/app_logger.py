@@ -1,6 +1,7 @@
 # WhatsApp Logger for ansari-whatsapp
 """Logging configuration for the WhatsApp service using Loguru."""
 
+import json
 import os
 import sys
 
@@ -33,10 +34,9 @@ def configure_logger():
     # Get settings
     settings = get_settings()
 
-    # Determine if we should use colorized output
-    # AWS CloudWatch doesn't render ANSI color codes properly, so disable colors for staging/production
-    is_aws_deployment = settings.DEPLOYMENT_TYPE in ["staging", "production"]
-    enable_colors = not is_aws_deployment
+    # Determine if we should use JSON structured logging for AWS CloudWatch
+    # CloudWatch Logs Insights works best with JSON-formatted logs
+    is_aws_deployment = settings.DEPLOYMENT_TYPE not in ["local", "development"]
 
     # Filter for test files only (when LOG_TEST_FILES_ONLY is True)
     def log_filter(record):
@@ -53,24 +53,36 @@ def configure_logger():
 
         return True
 
-    # Choose format based on deployment type
+    # Choose format and serialization based on deployment type
     if is_aws_deployment:
-        # Plain text format for AWS CloudWatch (no color codes)
-        log_format = "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {file}:{line} [{function}()] | {message}"
+        # JSON format for AWS CloudWatch (structured logging)
+        # Using Loguru's built-in serialize=True feature
+        # This automatically converts log records to JSON with all fields
+        #
+        # Important: json.dumps() automatically escapes newlines as \n in the JSON string
+        # This ensures multi-line messages (like CORS errors with \n) are kept as
+        # a SINGLE log entry in CloudWatch, which expands when clicked in the console
+        #
+        # Example output for multi-line message:
+        # {"text": "CORS Error\nStatus: 403\nPath: /api", "record": {...}}
+        # In CloudWatch, this appears as ONE entry that expands to show all lines
+        use_serialize = True
+        enable_colors = False
     else:
         # Colorized format for local development
-        log_format = (
+        use_serialize = False
+        enable_colors = True
+
+    # Add console handler for terminal output
+    logger.add(
+        sys.stderr,
+        format="{message}" if is_aws_deployment else (
             "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
             "<level>{level: <4}</level> | "
             "<cyan>{file}</cyan>:<cyan>{line}</cyan> "
             "<blue>[{function}()]</blue> | "
             "<level>{message}</level>"
-        )
-
-    # Add console handler for terminal output
-    logger.add(
-        sys.stderr,
-        format=log_format,
+        ),
         level=settings.LOGGING_LEVEL.upper(),
         enqueue=True,
         colorize=enable_colors,
@@ -78,6 +90,7 @@ def configure_logger():
         diagnose=False,
         filter=log_filter,
         catch=False,
+        serialize=use_serialize,  # Enable JSON serialization for AWS
     )
 
     # Write logs to all_logs.log file (IF we're running locally)

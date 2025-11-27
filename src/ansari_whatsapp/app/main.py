@@ -13,8 +13,7 @@ https://www.perplexity.ai/search/explain-fastapi-s-backgroundta-rnpU7D19QpSxp2ZO
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends
-from fastapi.responses import HTMLResponse, Response, JSONResponse
-from loguru import logger
+from fastapi.responses import HTMLResponse, Response
 
 from ansari_whatsapp.services.whatsapp_conversation_manager import WhatsAppConversationManager
 from ansari_whatsapp.services.service_provider import get_ansari_client
@@ -24,20 +23,11 @@ from ansari_whatsapp.utils.whatsapp_webhook_utils import (
     verify_meta_signature,
     create_response_for_meta,
 )
+# Note: Importing app_logger automatically configures loguru's logger due to module-level execution
+from ansari_whatsapp.utils.app_logger import logger
 from ansari_whatsapp.utils.time_utils import is_message_too_old
 from ansari_whatsapp.utils.config import get_settings
 from ansari_whatsapp.utils.general_helpers import CORSMiddlewareWithLogging
-from ansari_whatsapp.utils.app_logger import configure_logger
-
-# Configure logger at module load time
-# This ensures logger is configured whether the app is run via:
-# 1. Direct execution: python src/ansari_whatsapp/app/main.py
-# 2. Uvicorn command: uvicorn src.ansari_whatsapp.app.main:app --reload
-#
-# Note: Configuring once is sufficient as loguru's logger is a global singleton.
-# Any module that imports `from loguru import logger` will use the configured instance.
-# See: https://github.com/Delgan/loguru/issues/54#issuecomment-461724397
-configure_logger()
 
 
 # Lifespan context manager for managing HTTP client lifecycle

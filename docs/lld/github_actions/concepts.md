@@ -22,6 +22,13 @@ This guide explains the fundamental concepts of GitHub Actions that you need to 
   - [Artifacts](#artifacts)
     - [Uploading Artifacts](#uploading-artifacts)
     - [Downloading Artifacts](#downloading-artifacts)
+  - [Deployment Workflows](#deployment-workflows)
+    - [ansari-whatsapp Deployment Workflows](#ansari-whatsapp-deployment-workflows)
+    - [workflow\_run Trigger](#workflow_run-trigger)
+    - [Deployment Workflow Structure](#deployment-workflow-structure)
+  - [Pro Tip - Manual Workflow Management with GitHub CLI](#pro-tip---manual-workflow-management-with-github-cli)
+    - [Setup and Triggering Workflows](#setup-and-triggering-workflows)
+    - [Monitoring Workflow Runs](#monitoring-workflow-runs)
 
 
 ---
@@ -450,6 +457,55 @@ jobs:
 ```
 
 For AWS-specific deployment details, see [AWS Concepts - Deployment Pipeline](../../aws/concepts.md#deployment-pipeline).
+
+---
+
+## Pro Tip - Manual Workflow Management with GitHub CLI
+
+As an alternative to triggering workflows manually through GitHub's web interface, you can use the GitHub CLI (`gh`) for faster workflow management. This is especially useful for developers who prefer command-line tools.
+
+### Setup and Triggering Workflows
+
+```bash
+# Set your fork as the default repository for gh commands
+gh repo set-default <username>/<repo-name>
+
+# List all available workflows to see names and IDs
+gh workflow list
+
+# Run a specific workflow on a chosen branch
+gh workflow run <workflow-file>.yml --ref <branch-name>
+```
+
+**Placeholders:**
+- `<username>/<repo-name>`: Your GitHub username and forked repository (e.g., `john-doe/ansari-whatsapp`)
+- `<workflow-file>.yml`: The workflow filename (e.g., `deploy-staging.yml`)
+- `<branch-name>`: Branch to run the workflow on (e.g., `develop`, `main`)
+
+### Monitoring Workflow Runs
+
+```bash
+# List recent runs for a specific workflow
+gh run list --workflow="<workflow-file>.yml"
+
+# View details of a specific workflow run
+gh run view <run-id>
+
+# View details of a specific job within a run
+gh run view --job=<job-id>
+```
+
+**Placeholders:**
+- `<run-id>`: Workflow run ID (obtained from `gh run list`)
+- `<job-id>`: Job ID within the run (obtained from `gh run view <run-id>`)
+
+**Example workflow:**
+1. `gh workflow run deploy-staging.yml --ref develop` - Triggers staging deployment
+2. `gh run list --workflow="deploy-staging.yml"` - Shows recent deployment attempts
+3. `gh run view 1234567890` - Views the latest run details
+4. `gh run view --job=9876543210` - Monitors specific job progress
+
+This CLI approach provides the same functionality as the GitHub Actions web interface but can be faster for frequent operations and integrates well with automated scripts.
 
 ---
 

@@ -92,6 +92,8 @@ See [concepts.md - Environment Variable Management](./concepts.md#environment-va
 
 ## 📋 Quick Reference
 
+**Windows MSYS2/Git Bash Users:** Commands with log group names (paths like `/aws/apprunner/...`) require `MSYS2_ARG_CONV_EXCL="*"` prefix to prevent path conversion. See [setup_history.md - Windows Users Note](./setup_history.md#important-note-for-windows-users-msys2git-bash) for details.
+
 **Common AWS CLI Commands:**
 ```bash
 # List all App Runner services (to find service ARNs for subsequent commands)
@@ -100,7 +102,7 @@ aws apprunner list-services --region us-west-2
 # Get service URL
 aws apprunner describe-service --service-arn <arn> --query 'Service.ServiceUrl' --output text --region us-west-2
 
-# View logs (Windows/MSYS2)
+# View logs (Windows/MSYS2 - note the MSYS2_ARG_CONV_EXCL prefix)
 MSYS2_ARG_CONV_EXCL="*" aws logs tail "/aws/apprunner/SERVICE_NAME/SERVICE_ID/service" --region us-west-2 --since 30m
 
 # Update SSM parameter

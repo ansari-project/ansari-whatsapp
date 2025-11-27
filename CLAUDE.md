@@ -195,7 +195,11 @@ The service acts as a bridge between WhatsApp Business API and the Ansari backen
 ### Environment Configuration
 
 Key environment variables (see `.env.example`):
-- `BACKEND_SERVER_URL` - URL of the Ansari backend API
+- `BACKEND_SERVER_URL` - **Base URL only** of the Ansari backend API (without `/api/v2` suffix)
+  - Local: `http://localhost:8000`
+  - Staging: `https://staging-api.ansari.chat`
+  - Production: `https://api.ansari.chat`
+  - The `/whatsapp/v2/*` endpoints are appended to this base URL by the Ansari client
 - `META_BUSINESS_PHONE_NUMBER_ID` - WhatsApp Business phone number ID
 - `META_ACCESS_TOKEN_FROM_SYS_USER` - WhatsApp API access token
 - `META_WEBHOOK_VERIFY_TOKEN` - Webhook verification token
@@ -220,6 +224,20 @@ For complete deployment instructions, see the [AWS Deployment Documentation](./d
 
 ## ⚠️ CRITICAL SAFETY RULES
 
+**Git Push Permissions:**
+- **NEVER push directly to `ansari-project/ansari-backend`** without EXPLICIT user approval
+- **You MAY push to `ansari-project/ansari-whatsapp`** (this repository) as needed
+- **For ansari-backend changes, ALWAYS prompt the user first:**
+  - **Simple, non-breaking changes** (docs, `__init__.py`, comments, typos, formatting, config examples):
+    - Suggest pushing directly to `develop` branch for faster deployment
+    - Wait for user approval before executing
+  - **Complex or breaking changes** (code logic, API changes, dependencies, schema changes):
+    - Suggest creating a PR for review and testing
+    - Explain why a PR is recommended
+    - Wait for user's decision (PR vs direct push)
+- This is critical because ansari-backend is the main production service serving all users
+- When in doubt, ask the user which approach they prefer
+
 **AWS Resource Deletion:**
 - **NEVER execute any commands that delete AWS resources** (ECR repositories, App Runner services, SSM parameters, S3 buckets, databases, etc.) without EXPLICIT user approval
 - **ALWAYS ask the user first** before running any `delete`, `remove`, `destroy`, or destructive commands
@@ -243,6 +261,23 @@ For complete deployment instructions, see the [AWS Deployment Documentation](./d
 **Deployment:**
 - Staging: Push to `develop` branch (or manually trigger workflow)
 - Production: Push to `main` branch (or manually trigger workflow)
+
+**GitHub Actions CLI Workflow Management:**
+```bash
+# Set default repository (your fork or upstream)
+gh repo set-default <username>/<repo-name>  # e.g., OdyAsh/ansari-whatsapp
+
+# List available workflows
+gh workflow list
+
+# Trigger workflow manually
+gh workflow run <workflow-file>.yml --ref <branch>  # e.g., deploy-staging.yml --ref develop
+
+# Monitor workflow runs
+gh run list --workflow="<workflow-file>.yml"       # List recent runs
+gh run view <run-id>                               # View run details
+gh run view --job=<job-id>                          # View job details
+```
 
 **Get App Runner URL (for Cloudflare CNAME):**
 ```bash

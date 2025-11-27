@@ -8,6 +8,7 @@ This document provides step-by-step commands to replicate the AWS deployment set
   - [Prerequisites](#prerequisites)
     - [Tools Required](#tools-required)
     - [Access Required](#access-required)
+    - [Important Note for Windows Users (MSYS2/Git Bash)](#important-note-for-windows-users-msys2git-bash)
   - [Phase 1: AWS Infrastructure Setup](#phase-1-aws-infrastructure-setup)
     - [Step 1: Create ECR Repository](#step-1-create-ecr-repository)
     - [Step 2: Get Existing IAM Role ARNs](#step-2-get-existing-iam-role-arns)
@@ -29,6 +30,9 @@ This document provides step-by-step commands to replicate the AWS deployment set
     - [Update SSM Parameters](#update-ssm-parameters)
     - [Manual Deployment Trigger](#manual-deployment-trigger)
     - [View App Runner Logs](#view-app-runner-logs)
+      - [Step 1: Get Current Service ID](#step-1-get-current-service-id)
+      - [Step 2: View Logs](#step-2-view-logs)
+      - [Step 3: Filter Logs](#step-3-filter-logs)
     - [Check Service Status](#check-service-status)
     - [Rollback Deployment](#rollback-deployment)
   - [Cleanup Commands (⚠️ Danger Zone)](#cleanup-commands-️-danger-zone)
@@ -95,6 +99,29 @@ gh auth login
 - [x] Admin access to ansari-whatsapp repository settings
 - [x] GitHub CLI authenticated
 - [x] IAM role ARNs from ansari-backend setup
+
+### Important Note for Windows Users (MSYS2/Git Bash)
+
+**If you're using MSYS2 or Git Bash on Windows**, you'll need to prefix AWS CLI commands that include CloudWatch log group names (paths starting with `/`) with `MSYS2_ARG_CONV_EXCL="*"`:
+
+```bash
+# Example (MSYS2/Git Bash on Windows)
+MSYS2_ARG_CONV_EXCL="*" aws logs tail "/aws/apprunner/SERVICE_NAME/SERVICE_ID/service" --region us-west-2
+```
+
+**Why?** MSYS2/Git Bash automatically converts Unix-style paths (like `/aws/apprunner/...`) to Windows paths (like `C:/Program Files/Git/aws/apprunner/...`), which breaks AWS CLI commands since `/aws/apprunner/...` is a log group name, not a file path.
+
+**Solution:** `MSYS2_ARG_CONV_EXCL="*"` tells MSYS2 to exclude all arguments from path conversion.
+
+**Alternatives:**
+- Use PowerShell or CMD (no path conversion issues)
+- Use WSL (Windows Subsystem for Linux)
+- Set globally in `~/.bashrc`: `export MSYS2_ARG_CONV_EXCL="*"`
+
+**References:**
+- [MSYS2 Filesystem Paths Documentation](https://www.msys2.org/docs/filesystem-paths/)
+- [Docker and Git Bash Path Conversion Workaround](https://gist.github.com/borekb/cb1536a3685ca6fc0ad9a028e6a959e3)
+- [Stack Overflow: How to stop MinGW/MSYS from mangling paths](https://stackoverflow.com/questions/7250130/how-to-stop-mingw-and-msys-from-mangling-path-names-given-at-the-command-line)
 
 ---
 
@@ -678,19 +705,125 @@ Manually trigger deployment without pushing code:
 
 ### View App Runner Logs
 
-**From AWS CLI (Windows/MSYS2):**
-```bash
-# Staging logs (last 30 minutes)
-MSYS2_ARG_CONV_EXCL="*" aws logs tail "/aws/apprunner/ansari-staging-whatsapp/SERVICE_ID/service" --region us-west-2 --since 30m --profile ansari
+#### Step 1: Get Current Service ID
 
-# Production logs (last 1 hour)
-MSYS2_ARG_CONV_EXCL="*" aws logs tail "/aws/apprunner/ansari-production-whatsapp/SERVICE_ID/service" --region us-west-2 --since 1h --profile ansari
+First, get the service ID (instance ID) of the running App Runner service:
+
+```bash
+# Get staging service ID
+aws apprunner list-services --region us-west-2 --profile ansari \
+  --query "ServiceSummaryList[?ServiceName=='ansari-staging-whatsapp'].ServiceId" \
+  --output text
+
+# Get production service ID
+aws apprunner list-services --region us-west-2 --profile ansari \
+  --query "ServiceSummaryList[?ServiceName=='ansari-production-whatsapp'].ServiceId" \
+  --output text
+
+# Example output: 0d84da396de44c698f1866e70529ee3e
+```
+
+**Save this ID** - you'll need it for log commands below.
+
+#### Step 2: View Logs
+
+**Application Logs** (use `/application` for app stdout/stderr):
+
+```bash
+# Staging application logs (last 30 minutes) - (if on Windows' MSYS2/bash/etc, prefix with MSYS2_ARG_CONV_EXCL)
+MSYS2_ARG_CONV_EXCL="*" aws logs tail \
+  "/aws/apprunner/ansari-staging-whatsapp/<SERVICE_ID>/application" \
+  --region us-west-2 --since 30m --profile ansari
+```
+
+```powershell
+# Production application logs (last 1 hour) - (if on powershell, enter a backtick ` before line breaks)
+aws logs tail `
+  "/aws/apprunner/ansari-production-whatsapp/<SERVICE_ID>/application" `
+  --region us-west-2 --since 1h --profile ansari
+
+aws logs tail "/aws/apprunner/ansari-staging-whatsapp/<SERVICE_ID>/application" --region us-west-2 --since 30m --profile ansari
+```
+
+**Service Logs** (use `/service` for App Runner platform logs):
+
+```bash
+# View App Runner platform logs
+MSYS2_ARG_CONV_EXCL="*" aws logs tail \
+  "/aws/apprunner/ansari-staging-whatsapp/<SERVICE_ID>/service" \
+  --region us-west-2 --since 30m --profile ansari
+```
+
+**Note:** Replace `<SERVICE_ID>` with the actual ID from Step 1.
+
+#### Step 3: Filter Logs
+
+**Simple text search** (case-sensitive substring match):
+
+```bash
+# Find logs containing "error" (simple text match)
+MSYS2_ARG_CONV_EXCL="*" aws logs filter-log-events \
+  --log-group-name "/aws/apprunner/ansari-staging-whatsapp/<SERVICE_ID>/application" \
+  --region us-west-2 \
+  --start-time $(($(date +%s) - 3600))000 \
+  --filter-pattern "error" \
+  --profile ansari
+```
+
+**For JSON logs with special characters** (like "Status: 403"):
+
+CloudWatch's `--filter-pattern` has [strict syntax requirements](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html). For complex patterns with colons or special characters, **use CloudWatch Logs Insights instead**:
+
+```bash
+# Start a Logs Insights query
+QUERY_ID=$(MSYS2_ARG_CONV_EXCL="*" aws logs start-query \
+  --log-group-name "/aws/apprunner/ansari-staging-whatsapp/<SERVICE_ID>/application" \
+  --region us-west-2 \
+  --start-time $(($(date +%s) - 3600)) \
+  --end-time $(date +%s) \
+  --query-string 'fields text, file, line, time.iso | filter text like /Status: 403/ | sort time.timestamp desc | limit 50' \
+  --query 'queryId' \
+  --output text \
+  --profile ansari)
+
+echo "Query ID: $QUERY_ID"
+sleep 3  # Wait for query to complete
+
+# Get query results
+MSYS2_ARG_CONV_EXCL="*" aws logs get-query-results \
+  --query-id "$QUERY_ID" \
+  --region us-west-2 \
+  --profile ansari
+```
+
+**Common Logs Insights Queries:**
+
+```sql
+# Find all CORS errors
+fields text, file, line, time.iso
+| filter text like /CORS Origin Error/
+| sort time.timestamp desc
+
+# Find errors with Status: 403
+fields text, file, line, time.iso
+| filter text like /Status: 403/
+| sort time.timestamp desc
+
+# Find exceptions
+fields text, file, line, exception.type, exception.value, time.iso
+| filter ispresent(exception.type)
+| sort time.timestamp desc
 ```
 
 **From AWS Console:**
 1. Go to App Runner → Select service
 2. Click "Logs" tab
 3. View real-time logs
+
+**References:**
+- [CloudWatch Filter Pattern Syntax](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html)
+- [CloudWatch Logs Insights Query Syntax](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/CWL_QuerySyntax.html)
+- [Stack Overflow: CloudWatch JSON Filter with Special Characters](https://stackoverflow.com/questions/69561586/cloudwatch-json-filter-patern-with-special-character)
 
 ---
 

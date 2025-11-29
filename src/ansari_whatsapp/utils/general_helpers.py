@@ -3,8 +3,9 @@
 
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
-
 from loguru import logger
+
+from urllib.parse import urlparse
 
 
 # Custom CORS middleware to log errors that occur in the middleware layer (if any)
@@ -79,3 +80,8 @@ class CORSMiddlewareWithLogging(CORSMiddleware):
                     f"Host: {host}"
                 ),
             )
+
+
+def get_base_url(url):
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}"

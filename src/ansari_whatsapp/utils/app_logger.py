@@ -19,7 +19,6 @@ Technical Details:
 
 import json
 import os
-import re
 import sys
 
 from loguru import logger
@@ -39,7 +38,7 @@ settings = get_settings()
 
 # Determine if we should use JSON structured logging for AWS CloudWatch
 # CloudWatch Logs Insights works best with JSON-formatted logs
-is_aws_deployment = settings.DEPLOYMENT_TYPE not in ["local", "development"]
+is_aws_deployment = settings.DEPLOYMENT_TYPE not in ["local", "development"] and os.getenv("GITHUB_ACTIONS") != "true"
 
 ########################################## Functions ##########################################
 
@@ -63,16 +62,21 @@ def cloudwatch_json_sink(message):
     """Custom sink that writes clean JSON logs for AWS CloudWatch.
 
     Extracts the record from the message and formats it as minimal JSON.
-    Multi-line messages are split into arrays for better CloudWatch readability.
+    Multi-line messages have \n replaced with \r to make them appear multiline in the CloudWatch Agent GUI.
+    Reference: https://github.com/debug-js/debug/issues/296#issuecomment-289595923
 
     Args:
         message: The loguru message object with .record attribute
+
+    Note: Alternatively, to configure the `multi_line_start_pattern` field of the `logs` section of the 
+    CloudWatch agent configuration file on AWS to change its default delimiter, see:
+    https://github.com/debug-js/debug/issues/296#issuecomment-720866114
     """
     record = message.record
     msg = record["message"]
 
-    # Split multi-line messages into arrays for better CloudWatch display
-    text_value = [line for line in re.split(r'[\r\n]+', msg) if line.strip()] if re.search(r'[\r\n]+', msg) else msg
+    # Replace \n with \r to make CloudWatch log entries multiline
+    text_value = msg.replace('\n', '\r')
 
     log_entry = {
         "text": text_value,
@@ -88,7 +92,7 @@ def cloudwatch_json_sink(message):
         exc = record["exception"]
         log_entry["exception"] = {
             "type": exc.type.__name__ if exc.type else None,
-            "value": str(exc.value) if exc.value else None,
+            "value": str(exc.value).replace('\n', '\r') if exc.value else None,
         }
 
     # Convert to JSON and write to stderr with newline

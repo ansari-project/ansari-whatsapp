@@ -44,6 +44,7 @@ from loguru import logger
 from ansari_whatsapp.app.main import app
 from ansari_whatsapp.utils.config import get_settings
 from ansari_whatsapp.services.service_provider import reset_ansari_client
+from ansari_whatsapp.utils.general_helpers import get_base_url
 from .test_utils import (
     log_test_result,
     format_payload_for_logging,
@@ -60,9 +61,12 @@ def check_backend_availability() -> bool:
     settings = get_settings()
     backend_url = settings.BACKEND_SERVER_URL
 
+    # Use base URL since health check is at root endpoint in ansari-backend
+    base_backend_url = get_base_url(backend_url)
+
     try:
-        logger.info(f"Checking backend availability at {backend_url}")
-        response = httpx.get(f"{backend_url}/", timeout=3.0)
+        logger.info(f"Checking backend availability at {base_backend_url}")
+        response = httpx.get(f"{base_backend_url}/", timeout=3.0)
         is_available = response.status_code == 200
         logger.info(f"Backend availability: {'AVAILABLE' if is_available else 'UNAVAILABLE'} (status: {response.status_code})")
         return is_available

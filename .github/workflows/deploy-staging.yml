@@ -11,18 +11,34 @@ on:
 
   # Alternative solution: Use workflow_call from test workflow
   # Reference: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_call
-  # This allows the test workflow to call this deployment workflow after tests pass
-  workflow_call:
+  # Note: This also doesn't work for some reason...
+  # workflow_call:
+
+  # Trigger on push to develop branch
+  push:
+    branches: [develop]
 
   # Allow manual triggering
   workflow_dispatch:
 
 jobs:
+  # Run tests first if triggered by push (skip if manually triggered)
+  run-tests:
+    # Only run tests if this workflow was triggered by a push event
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/perform-tests.yml
+    secrets: inherit
+
   build-and-deploy:
+    # Run after tests (if they ran), or immediately (if manual trigger)
+    needs: [run-tests]
+    # Run if tests passed, or if tests were skipped (manual trigger)
+    # Reference: https://github.com/orgs/community/discussions/45058
+    if: |
+      always() &&
+      (needs.run-tests.result == 'success' || needs.run-tests.result == 'skipped')
     runs-on: ubuntu-latest
     environment: gh-actions-staging-env
-    # Only run if tests passed or if manually triggered
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
 
     steps:
       - name: Checkout

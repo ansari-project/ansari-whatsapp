@@ -14,9 +14,10 @@ on:
   # pull_request:
   #   branches: [ "main", "develop" ]
   
-  # Allow other workflows to trigger this workflow
-  # (Currently not used, but kept for future extensibility)
-  # workflow_call:
+  # Allow other workflows to call this workflow (makes it reusable)
+  # This allows deploy-staging.yml to run tests before deploying
+  # Reference: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+  workflow_call:
 
 permissions:
   contents: read
@@ -81,12 +82,3 @@ jobs:
     - name: Test with pytest
       run: |
         pytest tests/test_whatsapp_service.py -v -s --tb=short --color=yes
-
-  # Trigger deployment to staging after tests pass
-  # Reference: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_call
-  # This only runs on the develop branch to avoid deploying from feature branches
-  deploy-to-staging:
-    needs: ansari-whatsapp-tests
-    if: github.ref == 'refs/heads/develop'
-    uses: ./.github/workflows/deploy-staging.yml
-    secrets: inherit

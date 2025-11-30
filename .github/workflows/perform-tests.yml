@@ -13,8 +13,10 @@ on:
   #   * https://github.com/orgs/community/discussions/50161
   # pull_request:
   #   branches: [ "main", "develop" ]
+  
   # Allow other workflows to trigger this workflow
-  workflow_call:
+  # (Currently not used, but kept for future extensibility)
+  # workflow_call:
 
 permissions:
   contents: read
@@ -38,14 +40,12 @@ jobs:
       META_ANSARI_APP_SECRET: ${{ secrets.META_ANSARI_APP_SECRET || 'test_app_secret' }}
 
       ########### ansari-whatsapp's settings ##########
-      WHATSAPP_DEV_PHONE_NUM: ${{ secrets.WHATSAPP_DEV_PHONE_NUM}}
-      WHATSAPP_DEV_MESSAGE_ID: ${{ secrets.WHATSAPP_DEV_MESSAGE_ID}}
       WHATSAPP_SERVICE_API_KEY: ${{ secrets.WHATSAPP_SERVICE_API_KEY}}
 
       ########### Mock settings ###########
-      # If MOCK_META_API is true, then all above META_*/WHATSAPP_* settings are unused during tests  
-      MOCK_META_API: ${{ vars.MOCK_META_API || 'false' }}
-      MOCK_ANSARI_CLIENT: ${{ vars.MOCK_ANSARI_CLIENT || 'false' }}
+      # If MOCK_META_API is true, then all above META_*/WHATSAPP_* settings are unused during tests
+      MOCK_META_API: ${{ vars.MOCK_META_API || 'true' }}
+      MOCK_ANSARI_CLIENT: ${{ vars.MOCK_ANSARI_CLIENT || 'true' }}
 
       # Build/Test settings
       PYTHONPATH: 'src:.' 
@@ -81,3 +81,12 @@ jobs:
     - name: Test with pytest
       run: |
         pytest tests/test_whatsapp_service.py -v -s --tb=short --color=yes
+
+  # Trigger deployment to staging after tests pass
+  # Reference: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_call
+  # This only runs on the develop branch to avoid deploying from feature branches
+  deploy-to-staging:
+    needs: ansari-whatsapp-tests
+    if: github.ref == 'refs/heads/develop'
+    uses: ./.github/workflows/deploy-staging.yml
+    secrets: inherit

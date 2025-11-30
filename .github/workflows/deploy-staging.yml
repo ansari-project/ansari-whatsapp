@@ -2,12 +2,18 @@ name: Staging Deployment (AWS App Runner)
 
 on:
   # Trigger only after tests pass
-  workflow_run:
-    workflows: ["Ansari WhatsApp Pytests"]
-    types:
-      - completed
-    branches:
-      - develop
+  # Note: Apparently, this doesn't work even if the initial workflow run succeeds.
+  # (i suspect we need these yml files to be on "main" as well (even though the default branch is set to "develop"))
+  # workflow_run:
+  #   workflows: ["Ansari WhatsApp Pytests"]
+  #   types: [completed]
+  #   branches: [develop]
+
+  # Alternative solution: Use workflow_call from test workflow
+  # Reference: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_call
+  # This allows the test workflow to call this deployment workflow after tests pass
+  workflow_call:
+
   # Allow manual triggering
   workflow_dispatch:
 

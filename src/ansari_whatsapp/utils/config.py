@@ -88,10 +88,6 @@ class WhatsAppSettings(BaseSettings):
     WHATSAPP_CHAT_RETENTION_HOURS: int = 3
     WHATSAPP_MESSAGE_AGE_THRESHOLD_SECONDS: int = 86400  # 1 day
 
-    # Test/Development settings
-    WHATSAPP_DEV_PHONE_NUM: SecretStr = SecretStr("201234567899")
-    WHATSAPP_DEV_MESSAGE_ID: SecretStr = SecretStr("wamid.seventy_two_char_hash")
-
     # Logging settings
     LOGGING_LEVEL: str = "DEBUG"
     LOG_TEST_FILES_ONLY: bool = False

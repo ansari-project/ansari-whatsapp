@@ -65,9 +65,10 @@ If backend is not available and mock mode is disabled, tests will fail with clea
 **Required Test Environment Variables:**
 Tests that simulate WhatsApp webhook messages require:
 - `META_BUSINESS_PHONE_NUMBER_ID`: Your Meta business phone number ID
-- `WHATSAPP_DEV_PHONE_NUM`: A valid WhatsApp phone number for testing
-- `WHATSAPP_DEV_MESSAGE_ID`: A valid message ID for testing
+- `MOCK_META_API`: Set to `True` (default) to use mock Meta API, `False` for real API
+- `MOCK_ANSARI_CLIENT`: Set to `True` (default) to use mock backend, `False` for real backend
 
+Tests use hardcoded phone numbers and message IDs from Meta's sample webhook payloads.
 If these are not set, tests will fail with clear instructions. See `.env.example` for details.
 
 **CI/CD Test Commands:**

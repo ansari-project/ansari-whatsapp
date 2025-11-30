@@ -36,9 +36,8 @@ Secure logging and testing utilities:
    ```env
    META_WEBHOOK_VERIFY_TOKEN=your_verify_token
    META_BUSINESS_PHONE_NUMBER_ID=your_phone_number_id
-   WHATSAPP_DEV_PHONE_NUM=+1234567890  # For webhook message testing
-   WHATSAPP_DEV_MESSAGE_ID=wamid.xxx   # For webhook message testing
    MOCK_ANSARI_CLIENT=True             # Set to False to use real backend
+   MOCK_META_API=True                  # Set to False to use real Meta API
    BACKEND_SERVER_URL=http://localhost:8000  # Required if MOCK_ANSARI_CLIENT=False
    ALWAYS_RETURN_OK_TO_META=True       # Set to False for CI/CD
    LOG_TEST_FILES_ONLY=False           # Set to True to filter test logs
@@ -121,8 +120,10 @@ This usually means required environment variables are not set.
 
 **Required variables:**
 - `META_BUSINESS_PHONE_NUMBER_ID`: Your Meta business phone number ID
-- `WHATSAPP_DEV_PHONE_NUM`: A valid WhatsApp phone number for testing (e.g., `+1234567890`)
-- `WHATSAPP_DEV_MESSAGE_ID`: A valid message ID for testing (e.g., `wamid.xxx`)
+- `MOCK_ANSARI_CLIENT`: Set to `True` (default) for mock mode
+- `MOCK_META_API`: Set to `True` (default) for mock mode
+
+Tests use hardcoded phone numbers and message IDs from Meta's sample webhook payloads.
 
 **Solution:** Check your `.env` file and ensure all required variables are set. See `.env.example` for examples.
 

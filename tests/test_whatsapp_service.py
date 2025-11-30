@@ -19,9 +19,8 @@ Backend Availability:
 
 Required Environment Variables:
 - META_BUSINESS_PHONE_NUMBER_ID: Your Meta business phone number ID
-- WHATSAPP_DEV_PHONE_NUM: A valid WhatsApp phone number for testing
-- WHATSAPP_DEV_MESSAGE_ID: A valid message ID for testing
 - MOCK_ANSARI_CLIENT: True for mock mode, False for real backend
+- MOCK_META_API: True for mock mode (default), False for real Meta API
 - BACKEND_SERVER_URL: URL of backend service (required if MOCK_ANSARI_CLIENT=False)
 
 Security: All sensitive data is loaded from environment variables and masked in logs.
@@ -228,13 +227,13 @@ def test_webhook_verification(settings):
 def test_webhook_message_basic(settings):
     """Test basic WhatsApp webhook message processing using TestClient.
 
-    With mock client enabled, this test should always succeed with 200 status.
+    With mock mode enabled (default), this test should always succeed with 200 status.
+    Uses hardcoded test values (phone number and message ID) from Meta's sample webhook payloads.
 
     This test requires proper environment variables to be set that simulate
     a real WhatsApp message. If you encounter errors, verify:
     - META_BUSINESS_PHONE_NUMBER_ID is set
-    - WHATSAPP_DEV_PHONE_NUM is set
-    - WHATSAPP_DEV_MESSAGE_ID is set
+    - MOCK_META_API is set to True (default for CI/CD)
 
     See .env.example for details on required environment variables.
     """
@@ -255,8 +254,17 @@ def test_webhook_message_basic(settings):
                                 },
                                 "messages": [
                                     {
-                                        "from": settings.WHATSAPP_DEV_PHONE_NUM.get_secret_value(),
-                                        "id": settings.WHATSAPP_DEV_MESSAGE_ID.get_secret_value(),
+                                        # NOTE: Phone number used for testing webhooks
+                                        # Should be in international format without '+' or leading zeros
+                                        #   (sample below has an Egyptian country code '20')
+                                        # If you're testing locally and want to see messages get sent successfully
+                                        # to Meta's server, temporarily update this value with your actual phone number
+                                        "from": "201234567899",
+                                        # NOTE: Using hardcoded test message ID from Meta's sample webhook payloads.
+                                        # This works with MOCK_META_API=True (which is the default for CI/CD).
+                                        # Real message IDs have a ~30 day lifetime before becoming invalid.
+                                        # Reference: https://stackoverflow.com/questions/77161282/how-can-i-reply-to-a-specific-message-using-the-whatsapp-api
+                                        "id": "ABGGFlA5Fpa",
                                         "timestamp": str(int(time.time())),
                                         "type": "text",
                                         "text": {
@@ -333,8 +341,6 @@ These variables must simulate a real WhatsApp message.
 
 Required environment variables:
   - META_BUSINESS_PHONE_NUMBER_ID: Your Meta business phone number ID
-  - WHATSAPP_DEV_PHONE_NUM: A valid WhatsApp phone number for testing
-  - WHATSAPP_DEV_MESSAGE_ID: A valid message ID for testing
 
 Please check your .env file and ensure all required variables are set.
 See .env.example for the complete list of required environment variables

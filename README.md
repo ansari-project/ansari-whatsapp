@@ -149,9 +149,9 @@ pytest tests/ -m integration -v
 
 Tests require environment variables to be configured. Key settings:
 
-- **MOCK_ANSARI_CLIENT**: Set to `True` to use mock client (no backend needed), `False` to use real backend
+- **MOCK_ANSARI_CLIENT**: Set to `True` (default) to use mock client (no backend needed), `False` to use real backend
+- **MOCK_META_API**: Set to `True` (default) to use mock Meta API, `False` for real API
 - **BACKEND_SERVER_URL**: URL of the backend service (required if `MOCK_ANSARI_CLIENT=False`)
-- **Test-specific variables**: `WHATSAPP_DEV_PHONE_NUM`, `WHATSAPP_DEV_MESSAGE_ID`, etc.
 
 **Important**: If `MOCK_ANSARI_CLIENT=False` and the backend is not available, tests will fail with clear instructions on how to fix the issue.
 

@@ -77,8 +77,8 @@ See [concepts.md - Deployment Workflows](./concepts.md#deployment-workflows) for
 **Repository-Level (shared across all environments):**
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
 - `SERVICE_ROLE_ARN`, `INSTANCE_ROLE_ARN`
-- `META_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_DEV_PHONE_NUM`, `WHATSAPP_DEV_MESSAGE_ID`
-- `MOCK_META_API`, `MOCK_ANSARI_CLIENT`
+- `META_WEBHOOK_VERIFY_TOKEN`
+- `MOCK_META_API` (default: `true`), `MOCK_ANSARI_CLIENT` (default: `true`)
 
 **Environment-Level (staging/production):**
 - `gh-actions-staging-env`: `SSM_ROOT` variable (full ARN format: `arn:aws:ssm:us-west-2:AWS_ACCOUNT_ID:parameter/app-runtime/ansari-whatsapp/staging/`)

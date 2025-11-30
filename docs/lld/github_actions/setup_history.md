@@ -84,18 +84,10 @@ Repository-level secrets are accessible by all workflows and all environments.
 ```bash
 # Meta webhook verification token (same for all environments)
 gh secret set META_WEBHOOK_VERIFY_TOKEN --body "your_webhook_verify_token"
-
-# Test phone number (used in CI tests)
-gh secret set WHATSAPP_DEV_PHONE_NUM --body "201234567899"
-
-# Test message ID (used in CI tests)
-gh secret set WHATSAPP_DEV_MESSAGE_ID --body "wamid.seventy_two_char_hash"
 ```
 
 **What to replace:**
 - `your_webhook_verify_token` - Your Meta webhook verification token
-- `201234567899` - A test phone number in international format (no + or leading zeros)
-- `wamid.seventy_two_char_hash` - A real WhatsApp message ID (72 characters after "wamid.")
 
 ---
 

@@ -1,4 +1,4 @@
-name: Staging Deployment (AWS App Runner)
+name: Deploy to AWS App Runner
 
 on:
   # Trigger only after tests pass
@@ -11,26 +11,37 @@ on:
 
   # Alternative solution: Use workflow_call from test workflow
   # Reference: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_call
-  # Note: This also doesn't work for some reason...
+  # Note: This also doesn't work - the deploy-to-staging job in perform-tests.yml gets skipped
+  # even when the previous job succeeds. The issue is that github.event.workflow_run.conclusion
+  # is not available in workflow_call context, causing the if condition to fail.
+  # References:
+  # - https://github.com/actions/runner/issues/3146
+  # - https://github.com/orgs/community/discussions/174203
+  # - https://jiminbyun.medium.com/github-actions-workflow-run-vs-workflow-call-3f1a5c6e19d4
   # workflow_call:
 
-  # Trigger on push to develop branch
+  # Trigger on push to main (production) or develop (staging)
   push:
-    branches: [develop]
-
-  # Allow manual triggering
+    branches: [main, develop]
+  # Allow manual triggering with environment selection
   workflow_dispatch:
+    inputs:
+      chosen-environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
 
 jobs:
   # Run tests first if triggered by push (skip if manually triggered)
   run-tests:
-    # Only run tests if this workflow was triggered by a push event
     if: github.event_name == 'push'
     uses: ./.github/workflows/perform-tests.yml
     secrets: inherit
 
   build-and-deploy:
-    # Run after tests (if they ran), or immediately (if manual trigger)
     needs: [run-tests]
     # Run if tests passed, or if tests were skipped (manual trigger)
     # Reference: https://github.com/orgs/community/discussions/45058
@@ -38,13 +49,30 @@ jobs:
       always() &&
       (needs.run-tests.result == 'success' || needs.run-tests.result == 'skipped')
     runs-on: ubuntu-latest
-    environment: gh-actions-staging-env
+    # Set environment dynamically based on branch or manual input
+    # Reference: https://stackoverflow.com/questions/65826284/use-dynamic-input-value-for-environment-in-github-actions-workflow-job
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.chosen-environment || (github.ref_name == 'main' && 'gh-actions-production-env' || 'gh-actions-staging-env') }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Set deployment variables
+        id: deployment-vars
+        run: |
+          # Determine environment based on trigger type
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV_NAME="${{ inputs.chosen-environment }}"
+          elif [[ "${{ github.ref_name }}" == "main" ]]; then
+            ENV_NAME="production"
+          else
+            ENV_NAME="staging"
+          fi
+
+          echo "service_name=ansari-${ENV_NAME}-whatsapp" >> $GITHUB_OUTPUT
+          echo "Deploying to: $service_name"
 
       - name: Configure AWS credentials
         id: aws-credentials
@@ -100,7 +128,7 @@ jobs:
           ORIGINS: ${{ format('{0}{1}', vars.SSM_ROOT, 'origins') }}
 
         with:
-          service: ansari-staging-whatsapp
+          service: ${{ steps.deployment-vars.outputs.service_name }}
           image: ${{ steps.build-image.outputs.image }}
           access-role-arn: ${{ secrets.SERVICE_ROLE_ARN }}
           region: ${{ secrets.AWS_REGION }}

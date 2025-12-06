@@ -62,24 +62,16 @@ def cloudwatch_json_sink(message):
     """Custom sink that writes clean JSON logs for AWS CloudWatch.
 
     Extracts the record from the message and formats it as minimal JSON.
-    Multi-line messages have \n replaced with \r to make them appear multiline in the CloudWatch Agent GUI.
-    Reference: https://github.com/debug-js/debug/issues/296#issuecomment-289595923
 
     Args:
         message: The loguru message object with .record attribute
-
-    Note: Alternatively, to configure the `multi_line_start_pattern` field of the `logs` section of the 
-    CloudWatch agent configuration file on AWS to change its default delimiter, see:
-    https://github.com/debug-js/debug/issues/296#issuecomment-720866114
     """
     record = message.record
     msg = record["message"]
 
-    # Replace \n with \r to make CloudWatch log entries multiline
-    text_value = msg.replace('\n', '\r')
-
     log_entry = {
-        "text": text_value,
+        "level": record["level"].name,
+        "text": msg,
         "file_path": record["file"].path, # full file path
         "line": record["line"], # line number
         "function": record["function"], # function name
@@ -92,7 +84,7 @@ def cloudwatch_json_sink(message):
         exc = record["exception"]
         log_entry["exception"] = {
             "type": exc.type.__name__ if exc.type else None,
-            "value": str(exc.value).replace('\n', '\r') if exc.value else None,
+            "value": str(exc.value) if exc.value else None,
         }
 
     # Convert to JSON and write to stderr with newline

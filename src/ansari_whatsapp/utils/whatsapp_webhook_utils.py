@@ -18,6 +18,50 @@ from ansari_whatsapp.utils.config import get_settings
 settings = get_settings()
 
 
+def _verify_signature_with_secret(secret: str, body_bytes: bytes, received_signature: str) -> bool:
+    """
+    Verify HMAC-SHA256 signature with a single app secret.
+
+    Args:
+        secret: The app secret string
+        body_bytes: Raw request body bytes
+        received_signature: The signature received from the X-Hub-Signature-256 header
+
+    Returns:
+        bool: True if signature matches, False otherwise
+    """
+    app_secret = secret.encode('utf-8')
+    computed_signature = hmac.new(app_secret, body_bytes, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(computed_signature, received_signature)
+
+
+def _verify_signature_multi(secrets_str: str, body_bytes: bytes, received_signature: str) -> bool:
+    """
+    Verify signature with multiple comma-separated app secrets (temporary implementation).
+
+    Tries each secret in order: Ansari - Test, Ansari - Staging, Ansari (production).
+    This is temporary until we determine which signature Meta sends per environment.
+
+    Args:
+        secrets_str: Comma-separated app secrets string
+        body_bytes: Raw request body bytes
+        received_signature: The signature received from the X-Hub-Signature-256 header
+
+    Returns:
+        bool: True if any secret verified successfully, False otherwise
+    """
+    app_secrets = [s.strip() for s in secrets_str.split(',')]
+    app_names = ["Ansari - Test", "Ansari - Staging", "Ansari"]
+
+    for i, secret in enumerate(app_secrets):
+        if i >= len(app_names):
+            continue  # Skip extra secrets beyond expected apps
+        if _verify_signature_with_secret(secret, body_bytes, received_signature):
+            logger.debug(f"Webhook signature verified successfully using {app_names[i]} app secret")
+            return True
+    return False
+
+
 async def verify_meta_signature(request: Request) -> None:
     """
     Verify that the webhook request came from Meta using HMAC-SHA256 signature.
@@ -55,29 +99,28 @@ async def verify_meta_signature(request: Request) -> None:
         )
 
     # Extract the signature from the header (remove "sha256=" prefix)
-    received_signature = signature_header.replace("sha256=", "")
+    signature_received_from_meta = signature_header.replace("sha256=", "")
 
-    # Compute HMAC-SHA256 signature using the app secret
-    app_secret = settings.META_ANSARI_APP_SECRET.get_secret_value().encode('utf-8')
-    computed_signature = hmac.new(
-        app_secret,
+    # TODO later (odyash): Implement single-secret verification when we know which secret Meta uses per env.
+    # Try multi-secret verification (temporary implementation)
+    if _verify_signature_multi(
+        settings.META_ANSARI_APP_SECRET.get_secret_value(),
         body_bytes,
-        hashlib.sha256
-    ).hexdigest()
+        signature_received_from_meta
+    ):
+        logger.debug("Webhook signature verified successfully")
+        return
 
-    # Use constant-time comparison to prevent timing attacks
-    is_valid = hmac.compare_digest(computed_signature, received_signature)
-
-    if not is_valid:
-        logger.error("Invalid webhook signature; request isn't from Meta or you have misconfigured META_ANSARI_APP_SECRET")
-        raise HTTPException(
-            status_code=403,
-            detail="Invalid signature",
-            headers={"WWW-Authenticate": "HMAC-SHA256"},
-        )
-    else:
-        logger.trace("Webhook signature verified successfully")
-        logger.trace(f"{computed_signature=} \n {received_signature=}")
+    # If no match happens, raise exception
+    logger.error(
+        "Invalid webhook signature; request isn't from Meta or you have misconfigured "
+        "META_ANSARI_APP_SECRET"
+    )
+    raise HTTPException(
+        status_code=403,
+        detail="Invalid signature",
+        headers={"WWW-Authenticate": "HMAC-SHA256"},
+    )
 
 
 def create_response_for_meta(

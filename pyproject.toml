@@ -40,6 +40,12 @@ Documentation = "https://github.com/ansari-project/ansari-whatsapp"
 Source = "https://github.com/ansari-project/ansari-whatsapp"
 Tracker = "https://github.com/ansari-project/ansari-whatsapp/issues"
 
+[project.optional-dependencies]
+# Install with `uv pip install -e .[dev]` for development dependencies
+dev = [
+    "fastapi[standard]>=0.95.1",
+]
+
 [tool.ruff]
 line-length = 127
 indent-width = 4

@@ -91,6 +91,7 @@ app.add_middleware(
 @app.get("/")
 async def root():
     """Root endpoint for health checks."""
+    logger.info("Health check endpoint called")
     return {"status": "ok", "message": "Ansari WhatsApp service is running"}
 
 

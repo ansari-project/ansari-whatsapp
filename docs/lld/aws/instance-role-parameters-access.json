@@ -1,0 +1,29 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter",
+        "ssm:GetParameters",
+        "ssm:GetParametersByPath"
+      ],
+      "Resource": [
+        "arn:aws:ssm:us-west-2:*:parameter/app-runtime/ansari-whatsapp/staging/*",
+        "arn:aws:ssm:us-west-2:*:parameter/app-runtime/ansari-whatsapp/production/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "kms:Decrypt"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "ssm.us-west-2.amazonaws.com"
+        }
+      }
+    }
+  ]
+}

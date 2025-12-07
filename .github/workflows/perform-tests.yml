@@ -1,0 +1,81 @@
+# GitHub Actions workflow for ansari-whatsapp microservice
+# This workflow tests the WhatsApp integration functionality using pytest and TestClient
+
+name: Ansari WhatsApp Pytests
+
+on:
+  # NOTE: Can't run this on PRs from forked repo to upstream repo due to secrets not being passed.
+  #   Details: 
+  #   * https://stackoverflow.com/questions/66113900/github-actions-not-receiving-secrets
+  #   * https://github.com/orgs/community/discussions/50161
+  # pull_request:
+  #   branches: [ "main", "develop" ]
+  
+  # Allow other workflows to call this workflow (makes it reusable)
+  # This allows deploy-staging.yml to run tests before deploying
+  # Reference: https://docs.github.com/en/actions/using-workflows/reusing-workflows
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  ansari-whatsapp-tests:
+    runs-on: ubuntu-latest
+    environment: gh-actions-staging-env
+
+    env:
+      ########## Deployment settings ##########
+      DEPLOYMENT_TYPE: ${{ vars.DEPLOYMENT_TYPE || 'testing' }}
+
+      ########## ansari-backend's settings ##########
+      BACKEND_SERVER_URL: ${{ vars.BACKEND_SERVER_URL }}
+
+      ########### Meta Business API settings ###########
+      META_BUSINESS_PHONE_NUMBER_ID: ${{ secrets.META_BUSINESS_PHONE_NUMBER_ID }}
+      META_ACCESS_TOKEN_FROM_SYS_USER: ${{ secrets.META_ACCESS_TOKEN_FROM_SYS_USER}}
+      META_WEBHOOK_VERIFY_TOKEN: ${{ secrets.META_WEBHOOK_VERIFY_TOKEN || 'test_verify_token' }}
+      META_ANSARI_APP_SECRET: ${{ secrets.META_ANSARI_APP_SECRET || 'test_app_secret' }}
+
+      ########### ansari-whatsapp's settings ##########
+      WHATSAPP_SERVICE_API_KEY: ${{ secrets.WHATSAPP_SERVICE_API_KEY}}
+
+      ########### Mock settings ###########
+      # If MOCK_META_API is true, then all above META_*/WHATSAPP_* settings are unused during tests
+      MOCK_META_API: ${{ vars.MOCK_META_API || 'true' }}
+      MOCK_ANSARI_CLIENT: ${{ vars.MOCK_ANSARI_CLIENT || 'true' }}
+
+      # Build/Test settings
+      PYTHONPATH: 'src:.' 
+      # Enable uv to install packages into system Python (modern approach instead of passing `--system` flag every time)
+      UV_SYSTEM_PYTHON: '1'
+
+    # Use a Python 3.10 container
+    container: python:3.10
+
+    steps:
+
+    # Check out the repository code
+    - name: Check out repository code
+      uses: actions/checkout@v4
+
+    # Install the uv tool
+    - name: Install uv
+      run: |
+        pip install uv
+
+    # Install Python dependencies using uv
+    # Install the project in editable mode with all dependencies from pyproject.toml
+    # Also ensure test dependencies are installed
+    - name: Install dependencies
+      run: |
+        uv pip install -e .
+        # uv pip install pytest pytest-asyncio python-dotenv
+
+    # Run WhatsApp service tests (no external server dependencies)
+    # These test WhatsApp webhook endpoints using TestClient
+    # Note: WhatsApp API endpoint tests are in ansari-backend repository
+    # They test backend API endpoints and use TestClient without external servers
+    - name: Test with pytest
+      run: |
+        pytest tests/test_whatsapp_service.py -v -s --tb=short --color=yes

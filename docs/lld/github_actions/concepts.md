@@ -1,0 +1,516 @@
+# GitHub Actions Concepts
+
+This guide explains the fundamental concepts of GitHub Actions that you need to understand for working with the ansari-whatsapp CI/CD pipeline.
+
+***TOC:***
+
+- [GitHub Actions Concepts](#github-actions-concepts)
+  - [What is GitHub Actions?](#what-is-github-actions)
+  - [Key Concepts](#key-concepts)
+    - [Workflow](#workflow)
+    - [Job](#job)
+    - [Step](#step)
+    - [Runner](#runner)
+    - [Action](#action)
+  - [Workflow Structure](#workflow-structure)
+    - [Common Triggers](#common-triggers)
+  - [Environment Variables](#environment-variables)
+    - [Accessing Secrets](#accessing-secrets)
+    - [Accessing Variables](#accessing-variables)
+    - [Fallback Values](#fallback-values)
+    - [Repository vs Environment-Level](#repository-vs-environment-level)
+  - [Artifacts](#artifacts)
+    - [Uploading Artifacts](#uploading-artifacts)
+    - [Downloading Artifacts](#downloading-artifacts)
+  - [Deployment Workflows](#deployment-workflows)
+    - [ansari-whatsapp Deployment Workflows](#ansari-whatsapp-deployment-workflows)
+    - [workflow\_run Trigger](#workflow_run-trigger)
+    - [Deployment Workflow Structure](#deployment-workflow-structure)
+  - [Pro Tip - Manual Workflow Management with GitHub CLI](#pro-tip---manual-workflow-management-with-github-cli)
+    - [Setup and Triggering Workflows](#setup-and-triggering-workflows)
+    - [Monitoring Workflow Runs](#monitoring-workflow-runs)
+
+
+---
+
+## What is GitHub Actions?
+
+GitHub Actions is a CI/CD (Continuous Integration/Continuous Deployment) platform that allows you to automate your build, test, and deployment pipeline. It runs workflows in response to events in your repository (like pushes, pull requests, etc.).
+
+**Why use GitHub Actions?**
+- Automate testing on every commit
+- Deploy automatically when code is merged
+- Run workflows on GitHub's servers (no need to maintain your own CI/CD infrastructure)
+- Integrate directly with GitHub repositories
+
+---
+
+## Key Concepts
+
+### Workflow
+A configurable automated process defined in `.github/workflows/*.yml` files.
+
+**Example:**
+```yaml
+name: Run Tests
+on: [push, pull_request]
+```
+
+**Key points:**
+- Workflows are triggered by events (push, PR, schedule, manual)
+- Each repository can have multiple workflows
+- Workflows are defined in YAML format
+
+### Job
+A set of steps that execute on the same runner. Multiple jobs can run in parallel or sequentially.
+
+**Example:**
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run tests
+        run: pytest
+```
+
+**Key points:**
+- Jobs run in fresh virtual environments
+- By default, jobs run in parallel
+- Use `needs:` to create dependencies between jobs
+
+### Step
+An individual task that runs commands or uses actions. Steps run sequentially within a job.
+
+**Example:**
+```yaml
+steps:
+  - name: Checkout code
+    uses: actions/checkout@v4
+
+  - name: Run custom command
+    run: echo "Hello World"
+```
+
+**Key points:**
+- Steps in a job share the same filesystem
+- Can run shell commands or use pre-built actions
+
+### Runner
+A server that runs workflows. GitHub provides hosted runners (ubuntu-latest, windows-latest, macos-latest).
+
+**Example:**
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest  # GitHub-hosted Ubuntu runner
+```
+
+**Key points:**
+- GitHub-hosted runners are free for public repositories
+- Can also use self-hosted runners for custom environments
+
+### Action
+A reusable unit of code that performs a common task. Actions can be from GitHub, the community, or custom-built.
+
+**Example:**
+```yaml
+- uses: actions/checkout@v4        # Official GitHub action
+- uses: actions/upload-artifact@v4  # Upload files as artifacts
+```
+
+**Key points:**
+- Actions save time by reusing common functionality
+- Format: `owner/repo@version`
+- Browse actions at [GitHub Marketplace](https://github.com/marketplace?type=actions)
+
+**AWS App Runner Deploy Action Example:**
+
+The `awslabs/amazon-app-runner-deploy@main` action supports passing environment variables to your deployed service:
+
+```yaml
+- name: Deploy to App Runner
+  uses: awslabs/amazon-app-runner-deploy@main
+  env:
+    # Regular environment variable
+    BACKEND_URL: https://api.example.com
+    # SSM Parameter Store path for secrets
+    API_TOKEN_SSM: /myapp/prod/api-token
+  with:
+    service: my-service
+    image: my-image:latest
+    access-role-arn: ${{ secrets.ROLE_ARN }}
+    copy-env-vars: |
+      BACKEND_URL
+    copy-secret-env-vars: |
+      API_TOKEN_SSM
+```
+
+- **`copy-env-vars`**: Lists environment variable names (defined in the `env:` block) to pass as regular environment variables to the App Runner service. These values are visible in logs.
+- **`copy-secret-env-vars`**: Lists environment variable names whose **values must be AWS Systems Manager Parameter Store paths** (e.g., `/myapp/stage/secret-name`). App Runner will retrieve the actual secret values from SSM at runtime. These are masked in logs for security.
+  - Source: [action-configuration.ts](https://github.com/awslabs/amazon-app-runner-deploy/blob/main/src/action-configuration.ts#L189-L213) - `getEnvironmentVariables()` function
+  - Source: [index.test.ts](https://github.com/awslabs/amazon-app-runner-deploy/blob/main/src/index.test.ts#L269-L300) - Test showing `TEST_SECRET_ENV_VAR: '/test/secret_env'` as SSM path
+  - Source: [client-apprunner-commands.ts](https://github.com/awslabs/amazon-app-runner-deploy/blob/main/src/client-apprunner-commands.ts#L70-L96) - How `RuntimeEnvironmentSecrets` are passed to App Runner
+
+---
+
+## Workflow Structure
+
+A complete workflow file has this anatomy:
+
+```yaml
+name: Workflow Name                    # Human-readable name
+
+on:                                    # Trigger conditions
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    branches: ["main", "develop"]
+
+permissions:                           # Repository permissions
+  contents: read
+
+jobs:                                  # One or more jobs
+  test-job:
+    runs-on: ubuntu-latest            # Runner environment
+    environment: staging-env           # (Optional) Use environment-level secrets
+
+    env:                              # Environment variables
+      VAR_NAME: ${{ secrets.SECRET_NAME }}
+
+    steps:                            # Sequential tasks
+      - name: Checkout code
+        uses: actions/checkout@v4     # Use a reusable action
+
+      - name: Run command
+        run: echo "Hello World"       # Run shell commands
+```
+
+### Common Triggers
+
+**Push to specific branches:**
+```yaml
+on:
+  push:
+    branches: ["main", "develop"]
+```
+
+**Pull requests:**
+```yaml
+on:
+  pull_request:
+    branches: ["main"]
+```
+
+**Manual trigger:**
+```yaml
+on:
+  workflow_dispatch:  # Allows manual triggering from GitHub UI
+```
+
+**Scheduled (cron):**
+```yaml
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Daily at midnight
+```
+
+---
+
+## Environment Variables
+
+**Note:** Environment variables are stored in multiple locations (GitHub Secrets/Variables, AWS SSM, and `.env` files). See [AWS Concepts - Why Environment Variables Exist in Multiple Locations](../../aws/concepts.md#why-environment-variables-exist-in-multiple-locations) to understand why this duplication exists and how each location is used.
+
+### Accessing Secrets
+
+Secrets are encrypted values stored in GitHub Settings.
+
+**Syntax:**
+```yaml
+env:
+  MY_SECRET: ${{ secrets.MY_SECRET }}
+```
+
+**Example:**
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+```
+
+**Key points:**
+- Secrets are masked in logs (never printed in plain text)
+- Set in: Repository Settings → Secrets and variables → Actions
+
+### Accessing Variables
+
+Variables are non-sensitive configuration values.
+
+**Syntax:**
+```yaml
+env:
+  MY_VAR: ${{ vars.MY_VAR }}
+```
+
+**Example:**
+```yaml
+env:
+  BACKEND_URL: ${{ vars.BACKEND_URL }}
+  ENVIRONMENT: ${{ vars.ENVIRONMENT }}
+```
+
+**Key points:**
+- Variables are visible in logs (not encrypted)
+- Use for non-sensitive configuration (URLs, feature flags, etc.)
+
+### Fallback Values
+
+Provide default values when a variable/secret might not exist:
+
+```yaml
+env:
+  MY_VAR: ${{ vars.MY_VAR || 'default_value' }}
+  LOG_LEVEL: ${{ vars.LOG_LEVEL || 'INFO' }}
+```
+
+### Repository vs Environment-Level
+
+**Repository-level:** Accessible by all workflows
+```yaml
+env:
+  REPO_SECRET: ${{ secrets.REPO_SECRET }}
+```
+
+**Environment-level:** Scoped to specific environments (staging, production)
+```yaml
+jobs:
+  deploy:
+    environment: production  # Specify environment
+    env:
+      # This secret comes from the 'production' environment
+      API_KEY: ${{ secrets.API_KEY }}
+```
+
+**Precedence rules:**
+1. Environment-level secrets/variables override repository-level
+2. Secrets take precedence over variables (if same name)
+
+---
+
+## Artifacts
+
+Artifacts are files produced by workflow runs that you want to save and access later.
+
+**What are artifacts?**
+- Test results (JSON, XML reports)
+- Build outputs (binaries, packages)
+- Log files
+- Coverage reports
+
+**Retention:**
+- Default: 90 days
+- Configurable: 1-90 days
+- Can be downloaded from GitHub UI
+
+### Uploading Artifacts
+
+**Basic example:**
+```yaml
+- name: Upload test results
+  uses: actions/upload-artifact@v4
+  with:
+    name: test-results
+    path: test-output/
+```
+
+**Multiple files:**
+```yaml
+- name: Upload artifacts
+  uses: actions/upload-artifact@v4
+  with:
+    name: my-artifacts
+    path: |
+      logs/*.log
+      reports/*.json
+      coverage/
+    retention-days: 30
+```
+
+**Always upload (even on failure):**
+```yaml
+- name: Upload test results
+  uses: actions/upload-artifact@v4
+  if: always()  # Run even if previous steps failed
+  with:
+    name: test-results
+    path: test-output/
+```
+
+### Downloading Artifacts
+
+**From GitHub UI:**
+1. Go to Actions tab → Click workflow run
+2. Scroll to "Artifacts" section at bottom
+3. Click artifact name to download ZIP file
+
+**In another job:**
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run tests
+        run: pytest
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: results/
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+```
+
+---
+
+## Deployment Workflows
+
+### ansari-whatsapp Deployment Workflows
+
+The project has three main workflows:
+
+**1. Test Workflow (`perform-tests.yml`)**
+- Triggers: Push/PR to `main` or `develop`
+- Runs pytest tests
+- Uploads test results as artifacts
+
+**2. Staging Deployment (`deploy-staging.yml`)**
+- Triggers: After tests pass on `develop` branch OR manual trigger
+- Uses `workflow_run` to wait for test completion
+- Builds Docker image → Pushes to ECR → Deploys to `ansari-staging-whatsapp`
+- Environment: `gh-actions-staging-env`
+
+**3. Production Deployment (`deploy-production.yml`)**
+- Triggers: After tests pass on `main` branch OR manual trigger
+- Uses `workflow_run` to wait for test completion
+- Builds Docker image → Pushes to ECR → Deploys to `ansari-production-whatsapp`
+- Environment: `gh-actions-production-env`
+
+### workflow_run Trigger
+
+The deployment workflows use `workflow_run` to wait for tests to pass before deploying:
+
+```yaml
+on:
+  workflow_run:
+    workflows: ["Ansari WhatsApp Pytests"]
+    types:
+      - completed
+    branches:
+      - develop  # or main for production
+```
+
+**How it works:**
+1. Developer pushes to `develop`
+2. Test workflow runs
+3. If tests pass, deployment workflow triggers automatically
+4. If tests fail, deployment is skipped
+
+**Benefits:**
+- Never deploy broken code
+- Automatic deployment on successful tests
+- Can still manually trigger deployment if needed
+
+### Deployment Workflow Structure
+
+```yaml
+name: Staging Deployment (AWS App Runner)
+
+on:
+  workflow_run:
+    workflows: ["Ansari WhatsApp Pytests"]
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: gh-actions-staging-env  # Use environment-level secrets
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout
+      - name: Configure AWS credentials
+      - name: Login to Amazon ECR
+      - name: Build, tag, and push image
+      - name: Deploy to App Runner  # AWS-specific deployment
+```
+
+For AWS-specific deployment details, see [AWS Concepts - Deployment Pipeline](../../aws/concepts.md#deployment-pipeline).
+
+---
+
+## Pro Tip - Manual Workflow Management with GitHub CLI
+
+As an alternative to triggering workflows manually through GitHub's web interface, you can use the GitHub CLI (`gh`) for faster workflow management. This is especially useful for developers who prefer command-line tools.
+
+### Setup and Triggering Workflows
+
+```bash
+# Set your fork as the default repository for gh commands
+gh repo set-default <username>/<repo-name>
+
+# List all available workflows to see names and IDs
+gh workflow list
+
+# Run a specific workflow on a chosen branch
+gh workflow run <workflow-file>.yml --ref <branch-name>
+```
+
+**Placeholders:**
+- `<username>/<repo-name>`: Your GitHub username and forked repository (e.g., `john-doe/ansari-whatsapp`)
+- `<workflow-file>.yml`: The workflow filename (e.g., `deploy-staging.yml`)
+- `<branch-name>`: Branch to run the workflow on (e.g., `develop`, `main`)
+
+### Monitoring Workflow Runs
+
+```bash
+# List recent runs for a specific workflow
+gh run list --workflow="<workflow-file>.yml"
+
+# View details of a specific workflow run
+gh run view <run-id>
+
+# View details of a specific job within a run
+gh run view --job=<job-id>
+```
+
+**Placeholders:**
+- `<run-id>`: Workflow run ID (obtained from `gh run list`)
+- `<job-id>`: Job ID within the run (obtained from `gh run view <run-id>`)
+
+**Example workflow:**
+1. `gh workflow run deploy-staging.yml --ref develop` - Triggers staging deployment
+2. `gh run list --workflow="deploy-staging.yml"` - Shows recent deployment attempts
+3. `gh run view 1234567890` - Views the latest run details
+4. `gh run view --job=9876543210` - Monitors specific job progress
+
+This CLI approach provides the same functionality as the GitHub Actions web interface but can be faster for frequent operations and integrates well with automated scripts.
+
+---
+
+**External Resources:**
+- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [GitHub Actions Marketplace](https://github.com/marketplace?type=actions)
+- [Workflow Syntax Reference](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions)
+- [workflow_run Event](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_run)

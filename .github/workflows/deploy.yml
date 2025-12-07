@@ -1,0 +1,159 @@
+name: Deploy to AWS App Runner
+
+on:
+  # Trigger only after tests pass
+  # Note: Apparently, this doesn't work even if the initial workflow run succeeds.
+  # (i suspect we need these yml files to be on "main" as well (even though the default branch is set to "develop"))
+  # workflow_run:
+  #   workflows: ["Ansari WhatsApp Pytests"]
+  #   types: [completed]
+  #   branches: [develop]
+
+  # Alternative solution: Use workflow_call from test workflow
+  # Reference: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_call
+  # Note: This also doesn't work - the deploy-to-staging job in perform-tests.yml gets skipped
+  # even when the previous job succeeds. The issue is that github.event.workflow_run.conclusion
+  # is not available in workflow_call context, causing the if condition to fail.
+  # References:
+  # - https://github.com/actions/runner/issues/3146
+  # - https://github.com/orgs/community/discussions/174203
+  # - https://jiminbyun.medium.com/github-actions-workflow-run-vs-workflow-call-3f1a5c6e19d4
+  # workflow_call:
+
+  # Trigger on push to main (production) or develop (staging)
+  push:
+    branches: [main, develop]
+  # Allow manual triggering with environment selection
+  workflow_dispatch:
+    inputs:
+      chosen-environment:
+        description: 'Deployment environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  # Run tests first if triggered by push (skip if manually triggered)
+  run-tests:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/perform-tests.yml
+    secrets: inherit
+
+  build-and-deploy:
+    needs: [run-tests]
+    # Run if tests passed, or if tests were skipped (manual trigger)
+    # Reference: https://github.com/orgs/community/discussions/45058
+    if: |
+      always() &&
+      (needs.run-tests.result == 'success' || needs.run-tests.result == 'skipped')
+    runs-on: ubuntu-latest
+    # Set environment dynamically based on branch or manual input
+    # Reference: https://stackoverflow.com/questions/65826284/use-dynamic-input-value-for-environment-in-github-actions-workflow-job
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.chosen-environment || (github.ref_name == 'main' && 'gh-actions-production-env' || 'gh-actions-staging-env') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set deployment variables
+        id: deployment-vars
+        run: |
+          # Determine environment based on trigger type
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV_NAME="${{ inputs.chosen-environment }}"
+          elif [[ "${{ github.ref_name }}" == "main" ]]; then
+            ENV_NAME="production"
+          else
+            ENV_NAME="staging"
+          fi
+
+          SERVICE_NAME="ansari-${ENV_NAME}-whatsapp"
+          echo "service_name=$SERVICE_NAME" >> $GITHUB_OUTPUT
+          echo "Deploying to: $SERVICE_NAME"
+
+      - name: Configure AWS credentials
+        id: aws-credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ansari-whatsapp
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Deploy to App Runner
+        id: deploy-apprunner
+        uses: awslabs/amazon-app-runner-deploy@main
+        env:
+          # Environment Configuration
+          DEPLOYMENT_TYPE: ${{ format('{0}{1}', vars.SSM_ROOT, 'deployment-type') }}
+          LOGGING_LEVEL: ${{ format('{0}{1}', vars.SSM_ROOT, 'logging-level') }}
+
+          # Backend Integration
+          BACKEND_SERVER_URL: ${{ format('{0}{1}', vars.SSM_ROOT, 'backend-server-url') }}
+
+          # Meta/WhatsApp Credentials
+          META_ACCESS_TOKEN_FROM_SYS_USER: ${{ format('{0}{1}', vars.SSM_ROOT, 'meta-access-token-from-sys-user') }}
+          META_BUSINESS_PHONE_NUMBER_ID: ${{ format('{0}{1}', vars.SSM_ROOT, 'meta-business-phone-number-id') }}
+          META_WEBHOOK_VERIFY_TOKEN: ${{ format('{0}{1}', vars.SSM_ROOT, 'meta-webhook-verify-token') }}
+          META_API_VERSION: ${{ format('{0}{1}', vars.SSM_ROOT, 'meta-api-version') }}
+          META_ANSARI_APP_SECRET: ${{ format('{0}{1}', vars.SSM_ROOT, 'meta-ansari-app-secret') }}
+
+          # Service-to-Service Authentication
+          WHATSAPP_SERVICE_API_KEY: ${{ format('{0}{1}', vars.SSM_ROOT, 'whatsapp-service-api-key') }}
+
+          # Application Settings
+          WHATSAPP_CHAT_RETENTION_HOURS: ${{ format('{0}{1}', vars.SSM_ROOT, 'whatsapp-chat-retention-hours') }}
+          WHATSAPP_MESSAGE_AGE_THRESHOLD_SECONDS: ${{ format('{0}{1}', vars.SSM_ROOT, 'whatsapp-message-age-threshold-seconds') }}
+          WHATSAPP_UNDER_MAINTENANCE: ${{ format('{0}{1}', vars.SSM_ROOT, 'whatsapp-under-maintenance') }}
+
+          # Operational Settings
+          ALWAYS_RETURN_OK_TO_META: ${{ format('{0}{1}', vars.SSM_ROOT, 'always-return-ok-to-meta') }}
+          ORIGINS: ${{ format('{0}{1}', vars.SSM_ROOT, 'origins') }}
+
+        with:
+          service: ${{ steps.deployment-vars.outputs.service_name }}
+          image: ${{ steps.build-image.outputs.image }}
+          access-role-arn: ${{ secrets.SERVICE_ROLE_ARN }}
+          region: ${{ secrets.AWS_REGION }}
+          cpu: 1
+          memory: 2
+          port: 8001
+          wait-for-service-stability-seconds: 1200
+          # See docs/lld/aws/concepts.md for copy-env-vars vs copy-secret-env-vars behavior
+          copy-secret-env-vars: |
+            DEPLOYMENT_TYPE
+            LOGGING_LEVEL
+            BACKEND_SERVER_URL
+            META_ACCESS_TOKEN_FROM_SYS_USER
+            META_BUSINESS_PHONE_NUMBER_ID
+            META_WEBHOOK_VERIFY_TOKEN
+            META_API_VERSION
+            META_ANSARI_APP_SECRET
+            WHATSAPP_SERVICE_API_KEY
+            WHATSAPP_CHAT_RETENTION_HOURS
+            WHATSAPP_MESSAGE_AGE_THRESHOLD_SECONDS
+            WHATSAPP_UNDER_MAINTENANCE
+            ALWAYS_RETURN_OK_TO_META
+            ORIGINS
+          instance-role-arn: ${{ secrets.INSTANCE_ROLE_ARN }}
+
+      - name: App Runner URL
+        run: echo "App runner URL ${{ steps.deploy-apprunner.outputs.service-url }}"

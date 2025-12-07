@@ -193,6 +193,165 @@ The service acts as a bridge between WhatsApp Business API and the Ansari backen
    - `/whatsapp/v2/messages/process` - Process messages (streaming)
 4. Sends responses back to WhatsApp users via Graph API
 
+### Meta WhatsApp Business Architecture
+
+**Understanding how Meta's WhatsApp Business API works is critical for this project.**
+
+#### Terminology → Environment Variable Mapping
+
+This legend maps Meta/WhatsApp terminology to the actual environment variables used in `.env`:
+
+| Meta Terminology | Environment Variable | Description |
+|-----------------|---------------------|-------------|
+| **WABA ID** | `META_WABA_ID` | WhatsApp Business Account ID (used only in `check_subscriptions.py`) |
+| **Phone Number ID** | `META_BUSINESS_PHONE_NUMBER_ID` | Unique ID for a specific phone number under a WABA |
+| **App** / **Developer App** | `META_ACCESS_TOKEN_FROM_SYS_USER`<br>`META_ANSARI_APP_SECRET`<br>`META_WEBHOOK_VERIFY_TOKEN` | When "App" is mentioned alone, it refers to a Developer App created at developers.facebook.com (e.g., "Ansari - Test"). A WABA can be subscribed to many Apps, and an App can be subscribed to many WABAs (many-to-many relationship). The app is identified by the access token used; the token, app secret, and webhook verify token are all app-specific. |
+| **Access Token** / **System User Token** | `META_ACCESS_TOKEN_FROM_SYS_USER` | App-specific token for API authentication |
+| **App Secret** | `META_ANSARI_APP_SECRET` | App-specific secret key for webhook signature verification |
+| **Webhook URL** | N/A (configured in Meta Dashboard) | App-specific URL where Meta sends webhooks (e.g., `https://xxx.share.zrok.io/whatsapp/v2`) |
+| **Webhook Verify Token** | `META_WEBHOOK_VERIFY_TOKEN` | App-specific token used for initial webhook URL verification |
+| **zrok Share Token** | `META_WEBHOOK_ZROK_SHARE_TOKEN` | Token for maintaining a persistent zrok tunnel for local development on the Webhook URL of "Ansari Test" App |
+| **Meta API Version** | `META_API_VERSION` | Graph API version (e.g., `v22.0`) |
+
+**Key Insight**: The **Developer App** is never explicitly stored in `.env` because it's implicitly tied to your `META_ACCESS_TOKEN_FROM_SYS_USER`. When you generate a token, it's forever bound to the app you selected (e.g., "Ansari - Test"). This is why you need different tokens for different environments.
+
+#### Hierarchy of Meta Assets
+
+```
+Meta Business Manager (business.facebook.com)
+  └─ WhatsApp Business Account (WABA)
+      └─ Phone Numbers (up to 20 per WABA)
+
+Developer App (developers.facebook.com)
+  ├─ App ID & App Secret
+  ├─ Access Token (generated per app)
+  └─ Webhook URL (configured per app)
+```
+
+#### Key Concepts
+
+1. **WABA (WhatsApp Business Account)**:
+   - Container for WhatsApp phone numbers
+   - Managed in Meta Business Manager (business.facebook.com)
+   - Can host multiple phone numbers (max 20)
+   - Can be subscribed to multiple Developer Apps
+
+2. **Developer App** (e.g., "Ansari - Test", "Ansari - Staging", "Ansari"):
+   - Created at developers.facebook.com
+   - Each app has a unique App ID and App Secret
+   - Must be **subscribed** to a WABA to receive webhooks
+   - Subscription is the bridge that enables webhook delivery
+
+3. **Access Token**:
+   - Generated for a **specific** Developer App
+   - **Cannot be shared** between apps (app-specific)
+   - Used to authenticate API calls
+   - Generated via System User in Meta Business Manager
+   - Can be permanent (never expires) or temporary
+
+4. **App Secret**:
+   - Unique secret key for each Developer App
+   - Used by Meta to sign webhook payloads (X-Hub-Signature-256 header)
+   - Server must verify signature to ensure authenticity
+   - Found at: developers.facebook.com → Your App → Settings → Basic
+
+5. **Subscription**:
+   - Links a WABA to a Developer App
+   - Enables webhook delivery from WABA to the app
+   - Multiple apps can subscribe to the same WABA
+   - Controlled via API: `POST/DELETE /{WABA_ID}/subscribed_apps`
+
+#### How Webhooks Work
+
+When a user sends a WhatsApp message:
+
+1. **Message arrives** at WhatsApp phone number
+2. **Meta finds WABA** that owns that phone number
+3. **Meta checks subscriptions** - which Developer Apps are subscribed to that WABA?
+4. **Meta sends webhooks** to ALL subscribed apps' webhook URLs
+5. **Meta signs each webhook** with the respective app's App Secret
+6. **Server verifies signature** using App Secret before processing
+
+**Critical insight**: One WABA can send webhooks to multiple apps simultaneously. This is useful for routing to different environments (test/staging/production).
+
+#### Common Multi-Environment Setup
+
+This project typically uses 3 environments:
+
+**Test/Local:**
+- Developer App: `Ansari - Test` (ID: 871020755148175)
+- WABA: `Test WhatsApp Business Account`
+- Phone Number: Test number (90-day expiry from Meta)
+- Webhook URL: zrok tunnel (e.g., `https://xxx.share.zrok.io/whatsapp/v2`)
+- Access Token: Generated for "Ansari - Test"
+- App Secret: From "Ansari - Test" settings
+
+**Staging:**
+- Developer App: `Ansari - Staging`
+- WABA: Same or different WABA
+- Phone Number: Staging phone number
+- Webhook URL: `https://staging-api.ansari.chat/whatsapp/v2`
+- Access Token: Generated for "Ansari - Staging"
+- App Secret: From "Ansari - Staging" settings
+
+**Production:**
+- Developer App: `Ansari`
+- WABA: Production WABA
+- Phone Number: Official business phone
+- Webhook URL: `https://api.ansari.chat/whatsapp/v2`
+- Access Token: Generated for "Ansari" (production)
+- App Secret: From "Ansari" settings
+
+#### Why This Matters for Development
+
+1. **Access Tokens are App-Specific**:
+   - You need separate tokens for test/staging/production
+   - Use `.env.local`, `.env.staging`, `.env.production` with different tokens
+   - Token debugging tool: https://developers.facebook.com/tools/debug/accesstoken/
+
+2. **Subscriptions Control Webhook Delivery**:
+   - If WABA is not subscribed to your app, you won't receive messages
+   - Check subscriptions: `GET /{WABA_ID}/subscribed_apps`
+   - Subscribe: `POST /{WABA_ID}/subscribed_apps` (with app's access token)
+   - Unsubscribe: `DELETE /{WABA_ID}/subscribed_apps` (removes only the token's app)
+
+3. **App Secrets Must Match**:
+   - `META_ANSARI_APP_SECRET` in `.env` must match the Developer App
+   - Wrong secret = signature verification fails = webhooks rejected
+   - Each environment needs its own app secret
+
+4. **Phone Number Belongs to One WABA**:
+   - A phone number is owned by exactly one WABA
+   - But that WABA can route webhooks to multiple apps
+   - Useful for testing: Same WABA subscribed to both "Ansari - Test" and "Ansari - Staging"
+
+#### Troubleshooting Common Issues
+
+**Issue**: "Messages not reaching my webhook"
+- **Check 1**: Is your WABA subscribed to your app? (`GET /{WABA_ID}/subscribed_apps`)
+- **Check 2**: Does your access token match the subscribed app? (debug token tool)
+- **Check 3**: Is your webhook URL correct in app settings?
+- **Check 4**: Is your server running and accessible?
+
+**Issue**: "Signature verification failed"
+- **Check 1**: Does `META_ANSARI_APP_SECRET` match the app in your access token?
+- **Check 2**: Are you using the correct app's secret? (test vs staging vs production)
+
+**Issue**: "Token expired or invalid"
+- **Check 1**: Is it a permanent token or temporary token?
+- **Check 2**: Has the System User been deleted or token revoked?
+- **Check 3**: Use debug tool to check token validity
+
+#### Useful Tools & Resources
+
+- **Debug Access Token**: https://developers.facebook.com/tools/debug/accesstoken/
+- **Meta Business Manager**: https://business.facebook.com/
+- **Developer Apps Dashboard**: https://developers.facebook.com/apps/
+- **WhatsApp API Docs**: https://developers.facebook.com/docs/whatsapp/
+- **Subscription Manager Script**: `check_subscriptions.py` (in project root)
+  - View WABA details, check subscriptions, subscribe/unsubscribe
+  - Run: `.venv/Scripts/python.exe check_subscriptions.py`
+
 ### Environment Configuration
 
 Key environment variables (see `.env.example`):
@@ -201,9 +360,10 @@ Key environment variables (see `.env.example`):
   - Staging: `https://staging-api.ansari.chat`
   - Production: `https://api.ansari.chat`
   - The `/whatsapp/v2/*` endpoints are appended to this base URL by the Ansari client
-- `META_BUSINESS_PHONE_NUMBER_ID` - WhatsApp Business phone number ID
-- `META_ACCESS_TOKEN_FROM_SYS_USER` - WhatsApp API access token
-- `META_WEBHOOK_VERIFY_TOKEN` - Webhook verification token
+- `META_BUSINESS_PHONE_NUMBER_ID` - WhatsApp Business phone number ID (owned by a WABA)
+- `META_ACCESS_TOKEN_FROM_SYS_USER` - WhatsApp API access token (app-specific, not shared between apps)
+- `META_ANSARI_APP_SECRET` - App Secret for webhook signature verification (must match the app that generated the access token)
+- `META_WEBHOOK_VERIFY_TOKEN` - Webhook verification token (for initial webhook setup)
 - `DEPLOYMENT_TYPE` - Environment type (local/staging/production)
 - `WHATSAPP_CHAT_RETENTION_HOURS` - Chat history retention (default: 3)
 

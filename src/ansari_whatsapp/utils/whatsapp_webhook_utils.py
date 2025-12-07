@@ -18,49 +18,6 @@ from ansari_whatsapp.utils.config import get_settings
 settings = get_settings()
 
 
-def _verify_signature_with_secret(secret: str, body_bytes: bytes, received_signature: str) -> bool:
-    """
-    Verify HMAC-SHA256 signature with a single app secret.
-
-    Args:
-        secret: The app secret string
-        body_bytes: Raw request body bytes
-        received_signature: The signature received from the X-Hub-Signature-256 header
-
-    Returns:
-        bool: True if signature matches, False otherwise
-    """
-    app_secret = secret.encode('utf-8')
-    computed_signature = hmac.new(app_secret, body_bytes, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(computed_signature, received_signature)
-
-
-def _verify_signature_multi(secrets_str: str, body_bytes: bytes, received_signature: str) -> bool:
-    """
-    Verify signature with multiple comma-separated app secrets (temporary implementation).
-
-    Tries each secret in order: Ansari - Test, Ansari - Staging, Ansari (production).
-    This is temporary until we determine which signature Meta sends per environment.
-
-    Args:
-        secrets_str: Comma-separated app secrets string
-        body_bytes: Raw request body bytes
-        received_signature: The signature received from the X-Hub-Signature-256 header
-
-    Returns:
-        bool: True if any secret verified successfully, False otherwise
-    """
-    app_secrets = [s.strip() for s in secrets_str.split(',')]
-    app_names = ["Ansari - Test", "Ansari - Staging", "Ansari"]
-
-    for i, secret in enumerate(app_secrets):
-        if i >= len(app_names):
-            continue  # Skip extra secrets beyond expected apps
-        if _verify_signature_with_secret(secret, body_bytes, received_signature):
-            logger.debug(f"Webhook signature verified successfully using {app_names[i]} app secret")
-            return True
-    return False
-
 
 async def verify_meta_signature(request: Request) -> None:
     """
@@ -98,29 +55,32 @@ async def verify_meta_signature(request: Request) -> None:
             headers={"WWW-Authenticate": "HMAC-SHA256"},
         )
 
-    # Extract the signature from the header (remove "sha256=" prefix)
+    # Extract the received signature from the header (remove "sha256=" prefix)
     signature_received_from_meta = signature_header.replace("sha256=", "")
 
-    # TODO later (odyash): Implement single-secret verification when we know which secret Meta uses per env.
-    # Try multi-secret verification (temporary implementation)
-    if _verify_signature_multi(
-        settings.META_ANSARI_APP_SECRET.get_secret_value(),
-        body_bytes,
-        signature_received_from_meta
-    ):
+    # Extract our server's signature by 
+    # computing HMAC-SHA256 using meta's app secret
+    app_secret = settings.META_ANSARI_APP_SECRET.get_secret_value().encode('utf-8')
+    computed_signature = hmac.new(app_secret, body_bytes, hashlib.sha256).hexdigest()
+    
+    # Attempt secret verification by comparing signatures
+    # (i.e., if signatures match, then the app secret used to compute both signatures is the same)
+    is_valid = hmac.compare_digest(computed_signature, signature_received_from_meta)
+
+    if is_valid:
         logger.debug("Webhook signature verified successfully")
         return
-
-    # If no match happens, raise exception
-    logger.error(
-        "Invalid webhook signature; request isn't from Meta or you have misconfigured "
-        "META_ANSARI_APP_SECRET"
-    )
-    raise HTTPException(
-        status_code=403,
-        detail="Invalid signature",
-        headers={"WWW-Authenticate": "HMAC-SHA256"},
-    )
+    else:
+        # If no match happens, raise exception
+        logger.error(
+            "Invalid webhook signature; request isn't from Meta or you have misconfigured "
+            "META_ANSARI_APP_SECRET"
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid signature",
+            headers={"WWW-Authenticate": "HMAC-SHA256"},
+        )
 
 
 def create_response_for_meta(

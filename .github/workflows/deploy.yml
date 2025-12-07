@@ -71,8 +71,9 @@ jobs:
             ENV_NAME="staging"
           fi
 
-          echo "service_name=ansari-${ENV_NAME}-whatsapp" >> $GITHUB_OUTPUT
-          echo "Deploying to: $service_name"
+          SERVICE_NAME="ansari-${ENV_NAME}-whatsapp"
+          echo "service_name=$SERVICE_NAME" >> $GITHUB_OUTPUT
+          echo "Deploying to: $SERVICE_NAME"
 
       - name: Configure AWS credentials
         id: aws-credentials

@@ -11,13 +11,10 @@ https://stackoverflow.com/questions/72894209/whatsapp-cloud-api-sending-old-mess
 https://www.perplexity.ai/search/explain-fastapi-s-backgroundta-rnpU7D19QpSxp2ZOBzNUyg
 """
 
-from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends
 from fastapi.responses import HTMLResponse, Response
 
 from ansari_whatsapp.services.whatsapp_conversation_manager import WhatsAppConversationManager
-from ansari_whatsapp.services.service_provider import get_ansari_client
-from ansari_whatsapp.services.ansari_client_real import AnsariClientReal
 from ansari_whatsapp.utils.whatsapp_webhook_utils import (
     parse_meta_payload,
     verify_meta_signature,
@@ -30,52 +27,11 @@ from ansari_whatsapp.utils.config import get_settings
 from ansari_whatsapp.utils.general_helpers import CORSMiddlewareWithLogging
 
 
-# Lifespan context manager for managing HTTP client lifecycle
-# References:
-# - https://fastapi.tiangolo.com/advanced/events/#lifespan
-# - https://www.python-httpx.org/async/#opening-and-closing-clients
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """
-    Manage the lifecycle of HTTP clients and other resources.
-
-    This lifespan context manager ensures proper cleanup of resources like
-    HTTP connection pools when the application starts and shuts down.
-
-    Startup:
-    - Gets the singleton Ansari client instance (created on first access)
-    - This ensures the client is initialized before any requests arrive
-
-    Shutdown:
-    - Closes the singleton Ansari client to release connection pools
-    - Since get_ansari_client() returns a singleton, this closes the SAME instance
-      used by all request handlers throughout the application lifecycle
-    - Clean up any background tasks or resources
-
-    References:
-    - https://fastapi.tiangolo.com/advanced/events/#lifespan
-    - https://www.python-httpx.org/async/#opening-and-closing-clients
-    """
-    logger.info("Application startup: Initializing resources")
-    # Get singleton client instance - this will be shared across all requests
-    client = get_ansari_client()
-    logger.info(f"Ansari client singleton initialized: {type(client).__name__}")
-
-    yield  # Application is running
-
-    # Cleanup on shutdown - close the singleton instance
-    logger.info("Application shutdown: Cleaning up resources")
-    if isinstance(client, AnsariClientReal):
-        await client.close()
-        logger.info("HTTP client connections closed successfully")
-
-
-# Create FastAPI application with lifespan management
+# Create FastAPI application
 app = FastAPI(
     title="Ansari WhatsApp API",
     description="API for handling WhatsApp webhook requests for the Ansari service",
     version="1.0.0",
-    lifespan=lifespan,
 )
 
 # Add CORS middleware with logging

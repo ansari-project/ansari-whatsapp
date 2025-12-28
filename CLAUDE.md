@@ -174,6 +174,26 @@ src/ansari_whatsapp/
 - Auto-configures CORS origins based on deployment environment
 - Manages WhatsApp API credentials and backend URL
 
+**Logging & Observability** (`utils/app_logger.py` & `app/main.py`):
+- Structured JSON logging for AWS CloudWatch with automatic log correlation
+- Request ID middleware generates unique UUID per HTTP request (accessible via `X-Request-ID` header)
+- User ID tracking via backend integration (privacy-safe UUID, not phone numbers)
+- All logs include `request_id` (per-request) and `user_id` (per-user) for filtering
+- CloudWatch query examples:
+  ```sql
+  # All logs for one user (across all their messages)
+  fields @timestamp, request_id, user_id, level, text
+  | filter user_id = "user-uuid-123"
+  | sort @timestamp asc
+
+  # One specific request (granular debugging)
+  fields @timestamp, request_id, user_id, level, text
+  | filter request_id = "abc-123-def-456"
+  | sort @timestamp asc
+  ```
+- Sensitive data masking for phone numbers, tokens, and secrets
+- Loguru-based with contextvars for async-safe request isolation
+
 **Service Layer**:
 - **Ansari Client** (`services/ansari_client_*.py`): HTTP client for communicating with the main Ansari backend (base/real/mock)
 - **Meta API Service** (`services/meta_api_service_*.py`): WhatsApp Business API client for sending messages (base/real/mock)

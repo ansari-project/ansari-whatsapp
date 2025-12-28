@@ -94,18 +94,18 @@ class AnsariClientReal(AnsariClientBase):
             logger.error(f"Network error registering user {phone_num}: {e}")
             raise UserRegistrationError("Network error during registration") from e
 
-    async def check_user_exists(self, phone_num: str) -> bool:
+    async def check_user_exists(self, phone_num: str) -> str:
         """
-        Check if a WhatsApp user exists in the Ansari backend.
+        Get user ID for a WhatsApp phone number.
 
         Args:
             phone_num (str): The user's WhatsApp phone number.
 
         Returns:
-            bool: True if the user exists, False otherwise.
+            str: The user's ID
 
         Raises:
-            UserExistsCheckError: If the check fails.
+            UserExistsCheckError: If the user is not found or the check fails.
         """
         try:
             response = await self.client.get(
@@ -113,13 +113,17 @@ class AnsariClientReal(AnsariClientBase):
                 params={"phone_num": phone_num},
             )
             response.raise_for_status()
-            return response.json().get("exists", False)
+            user_id = response.json()
+            return user_id
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error checking if user exists {phone_num}: {e.response.status_code}")
-            raise UserExistsCheckError(f"Failed to check user existence: HTTP {e.response.status_code}") from e
+            if e.response.status_code == 404:
+                logger.debug(f"User {phone_num} not found (404)")
+                raise UserExistsCheckError("User not found") from e
+            logger.error(f"HTTP error getting user ID for {phone_num}: {e.response.status_code}")
+            raise UserExistsCheckError(f"Failed to get user ID: HTTP {e.response.status_code}") from e
         except httpx.RequestError as e:
-            logger.error(f"Network error checking if user exists {phone_num}: {e}")
-            raise UserExistsCheckError("Network error during user existence check") from e
+            logger.error(f"Network error getting user ID for {phone_num}: {e}")
+            raise UserExistsCheckError("Network error during user ID retrieval") from e
 
     async def create_thread(self, phone_num: str, title: str) -> dict:
         """

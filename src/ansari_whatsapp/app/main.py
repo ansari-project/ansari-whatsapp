@@ -11,8 +11,9 @@ https://stackoverflow.com/questions/72894209/whatsapp-cloud-api-sending-old-mess
 https://www.perplexity.ai/search/explain-fastapi-s-backgroundta-rnpU7D19QpSxp2ZOBzNUyg
 """
 
+import uuid
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, JSONResponse
 
 from ansari_whatsapp.services.whatsapp_conversation_manager import WhatsAppConversationManager
 from ansari_whatsapp.utils.whatsapp_webhook_utils import (
@@ -21,7 +22,7 @@ from ansari_whatsapp.utils.whatsapp_webhook_utils import (
     create_response_for_meta,
 )
 # Note: Importing app_logger automatically configures loguru's logger due to module-level execution
-from ansari_whatsapp.utils.app_logger import logger
+from ansari_whatsapp.utils.app_logger import logger, request_id_var, user_id_var
 from ansari_whatsapp.utils.time_utils import is_message_too_old
 from ansari_whatsapp.utils.config import get_settings
 from ansari_whatsapp.utils.general_helpers import CORSMiddlewareWithLogging
@@ -42,6 +43,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Request ID middleware for log correlation
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    """Generate unique request ID for each HTTP request.
+
+    This middleware:
+    - Generates a UUID for each incoming request
+    - Sets it in a contextvar (accessible in all logs during this request)
+    - Adds X-Request-ID header to response for client-side correlation
+    """
+    request_id = str(uuid.uuid4())
+    request_id_var.set(request_id)
+
+    logger.debug("Request started")
+
+    try:
+        response = await call_next(request)
+    except Exception as ex:
+        logger.error(f"Request failed: {ex}")
+        response = JSONResponse(content={"success": False}, status_code=500)
+    finally:
+        response.headers["X-Request-ID"] = request_id
+        logger.debug("Request ended")
+        return response
 
 
 @app.get("/")
@@ -246,19 +273,25 @@ async def main_webhook(
             error_code="MESSAGE_TOO_OLD"
         )
 
-    # Check if the user's phone number is stored and register if not
-    # Returns false if user's not found and their registration fails
-    user_found: bool = await conversation_manager.check_and_register_user()
-    if not user_found:
+    # Retrieve existing user or register new user and get their user_id
+    user_id = await conversation_manager.retrieve_or_register_user()
+
+    if user_id is None:
+        # User retrieval/registration failed
         background_tasks.add_task(
-            conversation_manager.send_whatsapp_message, "Sorry, we couldn't register you to our database. Please try again later."
+            conversation_manager.send_whatsapp_message,
+            "Sorry, we couldn't register you to our database. Please try again later."
         )
         return create_response_for_meta(
             success=False,
-            message="User registration failed",
+            message="User retrieval/registration failed",
             status_code=500,
             error_code="USER_REGISTRATION_FAILED"
         )
+
+    # Set user_id in contextvar for all subsequent logs (including background tasks)
+    # Check docs/logging/understanding_contextvars_in_python.md for details
+    user_id_var.set(user_id)
 
     # Check if the incoming message is a media type other than text
     if incoming_msg_type != "text":

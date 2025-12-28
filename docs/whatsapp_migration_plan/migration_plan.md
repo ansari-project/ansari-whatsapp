@@ -43,7 +43,7 @@
 The ansari-whatsapp service communicates with these backend endpoints:
 
 1. ✅ `POST /whatsapp/v2/users/register` - Register WhatsApp users
-2. ✅ `GET /whatsapp/v2/users/exists` - Check user existence
+2. ✅ `GET /whatsapp/v2/users/exists` - Get user ID for phone number (404 if not found)
 3. ✅ ~~`PUT /whatsapp/v2/users/location` - Update user location~~ (Removed for privacy)
 4. ✅ `POST /whatsapp/v2/threads` - Create new message threads
 5. ✅ `GET /whatsapp/v2/threads/last` - Get last thread info

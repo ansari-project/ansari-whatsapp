@@ -17,6 +17,7 @@ Technical Details:
   will modify the global logging state.
 """
 
+import contextvars
 import json
 import os
 import sys
@@ -24,6 +25,14 @@ import sys
 from loguru import logger
 
 from ansari_whatsapp.utils.config import get_settings
+
+########################################## Context Variables ##########################################
+
+# Context variables for log correlation
+# These automatically propagate to child async tasks (including FastAPI's BackgroundTasks)
+# Check docs/logging/understanding_contextvars_in_python.md for details
+request_id_var = contextvars.ContextVar('request_id', default='none')
+user_id_var = contextvars.ContextVar('user_id', default='none')
 
 ########################################## Global Vars and Logger Configurations ##########################################
 
@@ -42,14 +51,24 @@ is_aws_deployment = settings.DEPLOYMENT_TYPE not in ["local", "development"] and
 
 ########################################## Functions ##########################################
 
-# Filter for test files only (when LOG_TEST_FILES_ONLY is True)
-def log_filter(record):
-    """Filter logs based on test file settings.
+def log_record_preprocessor(record):
+    """Preprocess log records before formatting: inject context and apply filters.
+
+    This function runs before Loguru formats the log record and sends it to sink, and it serves two purposes:
+    1. Inject request_id and user_id from contextvars into record["extra"]
+    2. Filter logs based on LOG_TEST_FILES_ONLY setting
 
     Args:
         record: The log record being processed.
+
+    Returns:
+        bool: True to keep the log, False to discard it.
     """
-    # If LOG_TEST_FILES_ONLY is True, only allow logs from files in "tests" folder or files starting with "test_"
+    # Step 1: Inject context from contextvars
+    record["extra"]["request_id"] = request_id_var.get()
+    record["extra"]["user_id"] = user_id_var.get()
+
+    # Step 2: Apply filtering logic
     if settings.LOG_TEST_FILES_ONLY and not (
         "tests" in record["file"].path or "test_" in record["file"].name
     ):
@@ -57,14 +76,23 @@ def log_filter(record):
 
     return True
 
-# Custom sink function for AWS CloudWatch JSON formatting
 def cloudwatch_json_sink(message):
     """Custom sink that writes clean JSON logs for AWS CloudWatch.
 
     Extracts the record from the message and formats it as minimal JSON.
+    Includes request_id and user_id from Loguru's context for log correlation.
 
     Args:
         message: The loguru message object with .record attribute
+
+    Log Structure:
+        - level, text, file_path, line, function, process, thread, time
+        - request_id: UUID per HTTP request (for granular debugging)
+        - user_id: Database UUID per user (for tracking user conversations)
+        - exception: Stack trace details if present
+    
+    Note: `level` and `text` keys are mentioned first, as we would like them to visible when
+    viewing condensed logs in CloudWatch Console.
     """
     record = message.record
     msg = record["message"]
@@ -72,6 +100,8 @@ def cloudwatch_json_sink(message):
     log_entry = {
         "level": record["level"].name,
         "text": msg,
+        "request_id": record["extra"].get("request_id"),
+        "user_id": record["extra"].get("user_id"),
         "file_path": record["file"].path, # full file path
         "line": record["line"], # line number
         "function": record["function"], # function name
@@ -119,7 +149,10 @@ else:
         "<level>{level: <4}</level> | "
         "<cyan>{file}</cyan>:<cyan>{line}</cyan> "
         "<blue>[{function}()]</blue> | "
-        "<level>{message}</level>"
+        "<level>{message}</level> | "
+        # NOTE: Whenever you want to test/visualize request_id/user_id that appear in CloudWatch,
+        # you can uncomment the below line to see them in local logs as well.
+        # "req:{extra[request_id]} user:{extra[user_id]}"
     )
     enable_colors = True
 
@@ -132,23 +165,23 @@ logger.add(
     colorize=enable_colors,
     backtrace=False,
     diagnose=False,
-    filter=log_filter,
+    filter=log_record_preprocessor,
     catch=False,
 )
 
-# Write logs to all_logs.log file (IF we're running locally)
-if settings.DEPLOYMENT_TYPE == "local":
-    log_dir = os.path.join(os.getcwd(), "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    all_logs_file = os.path.join(log_dir, "all_logs.log")
-    logger.add(
-        all_logs_file,
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {file}:{line} [{function}()] | {message}",
-        level=settings.LOGGING_LEVEL.upper(),
-        enqueue=True,
-        backtrace=False,
-        diagnose=False,
-        filter=log_filter,
-        rotation="10 MB",
-        catch=False,
-    )
+# # If needed, uncomment below to write logs to all_logs.log file when running locally
+# if settings.DEPLOYMENT_TYPE == "local":
+#     log_dir = os.path.join(os.getcwd(), "logs")
+#     os.makedirs(log_dir, exist_ok=True)
+#     all_logs_file = os.path.join(log_dir, "all_logs.log")
+#     logger.add(
+#         all_logs_file,
+#         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {file}:{line} [{function}()] | {message}",
+#         level=settings.LOGGING_LEVEL.upper(),
+#         enqueue=True,
+#         backtrace=False,
+#         diagnose=False,
+#         filter=log_record_preprocessor,
+#         rotation="10 MB",
+#         catch=False,
+#     )

@@ -132,18 +132,25 @@ class AnsariClientMock(AnsariClientBase):
         return {"status": "success", "user_id": user_id}
 
     @simulate_backend_behavior()
-    async def check_user_exists(self, phone_num: str) -> bool:
-        """Mock user existence check.
+    async def check_user_exists(self, phone_num: str) -> str:
+        """Mock user ID retrieval.
 
         Args:
             phone_num: The user's WhatsApp phone number
 
         Returns:
-            bool: True if user exists in mock storage, False otherwise
+            str: The user's ID
+
+        Raises:
+            UserExistsCheckError: If user not found
         """
-        exists = phone_num in self._users
-        logger.debug(f"Mock: User {phone_num} exists: {exists}")
-        return exists
+        if phone_num not in self._users:
+            logger.debug(f"Mock: User {phone_num} not found")
+            raise UserExistsCheckError("User not found")
+
+        user_id = self._users[phone_num]["user_id"]
+        logger.debug(f"Mock: Found user_id for {phone_num}: {user_id}")
+        return user_id
 
     @simulate_backend_behavior()
     async def create_thread(self, phone_num: str, title: str) -> dict:

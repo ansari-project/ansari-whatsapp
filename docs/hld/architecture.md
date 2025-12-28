@@ -154,7 +154,7 @@ sequenceDiagram
 ### ansari-backend WhatsApp API Endpoints
 
 - **POST /whatsapp/v2/users/register**: Register a new WhatsApp user
-- **GET /whatsapp/v2/users/exists**: Check if a WhatsApp user exists
+- **GET /whatsapp/v2/users/exists**: Get user ID for a WhatsApp phone number (404 if not found)
 - **POST /whatsapp/v2/threads**: Create a new message thread
 - **GET /whatsapp/v2/threads/last**: Get information about the last active thread
 - **GET /whatsapp/v2/threads/{thread_id}/history**: Get thread message history

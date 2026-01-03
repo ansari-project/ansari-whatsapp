@@ -421,5 +421,5 @@ if __name__ == "__main__":
         port=8001,
         reload=reload_uvicorn,
         reload_includes=reload_includes,
-        log_level="INFO" # settings.LOGGING_LEVEL.lower(),
+        log_level="info"  # Uvicorn expects lowercase log levels
     )

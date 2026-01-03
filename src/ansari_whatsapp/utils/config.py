@@ -3,7 +3,7 @@
 
 from functools import lru_cache
 
-from pydantic import SecretStr, Field, field_validator
+from pydantic import HttpUrl, SecretStr, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -93,6 +93,7 @@ class WhatsAppSettings(BaseSettings):
     LOG_TEST_FILES_ONLY: bool = False
 
     # Service Provider settings
+    SENTRY_DSN: HttpUrl | None = None
     MOCK_ANSARI_CLIENT: bool = False
     MOCK_META_API: bool = False
 

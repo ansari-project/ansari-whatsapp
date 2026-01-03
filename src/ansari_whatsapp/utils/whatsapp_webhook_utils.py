@@ -101,7 +101,7 @@ def create_response_for_meta(
         message: Human-readable message
         status_code: HTTP status code to use (only in test mode)
         error_code: Machine-readable error code
-        details: Additional details to include in response
+        details: Additional details to include in response as "detail" key
 
     Returns:
         Response: HTTP response appropriate for current environment
@@ -129,7 +129,7 @@ def create_response_for_meta(
         response_body["error_code"] = error_code
 
     if details:
-        response_body["details"] = details
+        response_body["detail"] = details
 
     # When ALWAYS_RETURN_OK_TO_META is False: return proper HTTP status codes (for testing)
     # When ALWAYS_RETURN_OK_TO_META is True: always return 200 for Meta compliance

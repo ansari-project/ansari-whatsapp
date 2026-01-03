@@ -2,9 +2,11 @@
 """Real client implementation for Meta WhatsApp API via HTTP."""
 
 import httpx
+import sentry_sdk
 
 from loguru import logger
 
+from ansari_whatsapp.utils.app_logger import request_id_var
 from ansari_whatsapp.utils.config import get_settings
 from ansari_whatsapp.services.meta_api_service_base import MetaApiServiceBase
 
@@ -70,6 +72,15 @@ class MetaApiServiceReal(MetaApiServiceBase):
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error sending typing indicator: {e.response.status_code}")
             logger.error(f"Response body: {e.response.text}")
+            # Only capture 5xx errors (Meta's fault, not ours)
+            if e.response.status_code >= 500:
+                sentry_sdk.set_tag("error_type", "meta_api_failure")
+                sentry_sdk.set_context("meta_api_details", {
+                    "status_code": e.response.status_code,
+                    "endpoint": "send_typing_indicator",
+                    "request_id": request_id_var.get(),
+                })
+                sentry_sdk.capture_exception(e)
             raise
         except httpx.RequestError as e:
             logger.error(f"Network error sending typing indicator: {e}")
@@ -133,6 +144,15 @@ class MetaApiServiceReal(MetaApiServiceBase):
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error sending message: {e.response.status_code}")
             logger.error(f"Response body: {e.response.text}")
+            # Only capture 5xx errors (Meta's fault, not ours)
+            if e.response.status_code >= 500:
+                sentry_sdk.set_tag("error_type", "meta_api_failure")
+                sentry_sdk.set_context("meta_api_details", {
+                    "status_code": e.response.status_code,
+                    "endpoint": "send_message",
+                    "request_id": request_id_var.get(),
+                })
+                sentry_sdk.capture_exception(e)
             raise
         except httpx.RequestError as e:
             logger.error(f"Network error sending message: {e}")

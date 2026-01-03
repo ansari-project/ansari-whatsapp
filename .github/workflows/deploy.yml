@@ -124,6 +124,9 @@ jobs:
           WHATSAPP_MESSAGE_AGE_THRESHOLD_SECONDS: ${{ format('{0}{1}', vars.SSM_ROOT, 'whatsapp-message-age-threshold-seconds') }}
           WHATSAPP_UNDER_MAINTENANCE: ${{ format('{0}{1}', vars.SSM_ROOT, 'whatsapp-under-maintenance') }}
 
+          # Observability Settings
+          SENTRY_DSN: ${{ format('{0}{1}', vars.SSM_ROOT, 'sentry-dsn') }}
+
           # Operational Settings
           ALWAYS_RETURN_OK_TO_META: ${{ format('{0}{1}', vars.SSM_ROOT, 'always-return-ok-to-meta') }}
           ORIGINS: ${{ format('{0}{1}', vars.SSM_ROOT, 'origins') }}
@@ -151,6 +154,7 @@ jobs:
             WHATSAPP_CHAT_RETENTION_HOURS
             WHATSAPP_MESSAGE_AGE_THRESHOLD_SECONDS
             WHATSAPP_UNDER_MAINTENANCE
+            SENTRY_DSN
             ALWAYS_RETURN_OK_TO_META
             ORIGINS
           instance-role-arn: ${{ secrets.INSTANCE_ROLE_ARN }}

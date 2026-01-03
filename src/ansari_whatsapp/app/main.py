@@ -12,8 +12,13 @@ https://www.perplexity.ai/search/explain-fastapi-s-backgroundta-rnpU7D19QpSxp2ZO
 """
 
 import uuid
+
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends
 from fastapi.responses import HTMLResponse, Response, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+import sentry_sdk
+from sentry_sdk.types import Event, Hint
 
 from ansari_whatsapp.services.whatsapp_conversation_manager import WhatsAppConversationManager
 from ansari_whatsapp.utils.whatsapp_webhook_utils import (
@@ -28,12 +33,79 @@ from ansari_whatsapp.utils.config import get_settings
 from ansari_whatsapp.utils.general_helpers import CORSMiddlewareWithLogging
 
 
+# Configure Sentry for error tracking when we're NOT developing locally
+# NOTE: The SENTRY_DSN check is redundant, since Sentry's init() and other methods 
+#   will be in "no-ops" mode (i.e., do nothing) if the DSN isn't configured.
+#   Source: https://docs.sentry.io/platforms/python/configuration/options/#dsn
+#   Nevertheless, we're adding it here for clarity.
+deployment_type = get_settings().DEPLOYMENT_TYPE
+if get_settings().SENTRY_DSN and deployment_type != "local": 
+    ignore_errors = [
+        "HTTP exception: 401",
+        "HTTP exception: 403",
+    ]
+
+    def sentry_before_send(event: Event, hint: Hint) -> Event | None:
+        logentry = event.get("logentry")
+        if logentry and any(error in logentry.get("message", "") for error in ignore_errors):
+            return None
+
+        return event
+
+    sentry_sdk.init(
+        dsn=get_settings().SENTRY_DSN,
+        environment=deployment_type,
+        # Add data like request headers and IP for users, if applicable;
+        # see https://docs.sentry.io/platforms/python/data-management/data-collected/ for more info
+        send_default_pii=False,
+        # Set traces_sample_rate to 1.0 to capture 100%
+        # of transactions for tracing.
+        traces_sample_rate=0.2 if deployment_type == "production" else 1.0,
+        # Set profiles_sample_rate to 1.0 to profile 100%
+        # of sampled transactions.
+        # We recommend adjusting this value in production.
+        profiles_sample_rate=0.2 if deployment_type == "production" else 1.0,
+        before_send=sentry_before_send,
+    )
+
+
+
 # Create FastAPI application
 app = FastAPI(
     title="Ansari WhatsApp API",
     description="API for handling WhatsApp webhook requests for the Ansari service",
     version="1.0.0",
 )
+
+# Custom exception handlers for consistent error responses
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc):
+    logger.error(f"HTTP exception: {exc}")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    errors = exc.errors()
+    logger.error(f"Validation errors: {errors}")
+    return JSONResponse(
+        status_code=400,
+        content={"detail": str(exc)},
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
+@app.get("/sentry-debug")
+async def trigger_error():
+    division_by_zero = 1 / 0
 
 # Add CORS middleware with logging
 app.add_middleware(
@@ -60,15 +132,11 @@ async def request_id_middleware(request: Request, call_next):
 
     logger.debug("Request started")
 
-    try:
-        response = await call_next(request)
-    except Exception as ex:
-        logger.error(f"Request failed: {ex}")
-        response = JSONResponse(content={"success": False}, status_code=500)
-    finally:
-        response.headers["X-Request-ID"] = request_id
-        logger.debug("Request ended")
-        return response
+    response = await call_next(request)
+
+    response.headers["X-Request-ID"] = request_id
+    logger.debug("Request ended")
+    return response
 
 
 @app.get("/")
@@ -211,6 +279,11 @@ async def main_webhook(
         logger.debug(f"Incoming whatsapp webhook message from {from_whatsapp_number}")
     except Exception as e:
         logger.exception(f"Error extracting message details: {e}")
+        sentry_sdk.set_tag("error_type", "webhook_processing_failure")
+        sentry_sdk.set_context("webhook_details", {
+            "request_id": request_id_var.get(),
+        })
+        sentry_sdk.capture_exception(e)
         return create_response_for_meta(
             success=False,
             message="Error processing webhook payload",
@@ -348,5 +421,5 @@ if __name__ == "__main__":
         port=8001,
         reload=reload_uvicorn,
         reload_includes=reload_includes,
-        log_level=settings.LOGGING_LEVEL.lower(),
+        log_level="INFO" # settings.LOGGING_LEVEL.lower(),
     )

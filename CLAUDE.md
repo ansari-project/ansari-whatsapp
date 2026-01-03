@@ -40,6 +40,10 @@ This is the `ansari-whatsapp` microservice that handles WhatsApp webhook request
 - **Formatting**: `ruff format .` - Auto-formats code with double quotes and 4-space indentation
 - **Fix issues**: `ruff check --fix .` - Auto-fixes linting issues
 
+### Code Style Guidelines
+- **No Emojis in Code**: Do not add emojis to any code files (Python, config, documentation)
+- Emojis may only be used in commit messages if explicitly requested by the user
+
 ### Utilities
 - **Clean logs**: `./clean_logs.sh [minutes]` - Removes log entries older than specified minutes (0 = all)
 

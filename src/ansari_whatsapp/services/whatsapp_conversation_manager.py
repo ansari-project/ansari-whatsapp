@@ -5,10 +5,13 @@ import asyncio
 import time
 from datetime import datetime, timezone
 
+import httpx
+import sentry_sdk
 from loguru import logger
 
 from ansari_whatsapp.services.service_provider import get_ansari_client
 from ansari_whatsapp.services.meta_service_provider import get_meta_api_service
+from ansari_whatsapp.utils.app_logger import request_id_var, user_id_var
 from ansari_whatsapp.utils.exceptions import (
     UserRegistrationError,
     UserExistsCheckError,
@@ -257,8 +260,29 @@ class WhatsAppConversationManager:
                     thread_id=thread_id,
                     message=incoming_txt_msg,
                 )
+            except httpx.TimeoutException as e:
+                logger.error(f"Backend timeout while processing message: {e}")
+                sentry_sdk.set_tag("error_type", "backend_timeout")
+                sentry_sdk.set_context("message_details", {
+                    "request_id": request_id_var.get(),
+                    "user_id": user_id_var.get(),
+                })
+                sentry_sdk.capture_exception(e)
+                await self.send_whatsapp_message(
+                    "The request timed out. Please try sending your message again."
+                )
+                # Cancel typing indicator if running
+                if self.typing_indicator_task and not self.typing_indicator_task.done():
+                    self.typing_indicator_task.cancel()
+                return
             except MessageProcessingError as e:
                 logger.error(f"Failed to process message: {e}")
+                sentry_sdk.set_tag("error_type", "message_processing_failure")
+                sentry_sdk.set_context("message_details", {
+                    "request_id": request_id_var.get(),
+                    "user_id": user_id_var.get(),
+                })
+                sentry_sdk.capture_exception(e)
                 await self.send_whatsapp_message(
                     "An error occurred while processing your message. Please try again later."
                 )

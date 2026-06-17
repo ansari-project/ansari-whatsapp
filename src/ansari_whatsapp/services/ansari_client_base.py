@@ -28,17 +28,17 @@ class AnsariClientBase(ABC):
         pass
 
     @abstractmethod
-    async def check_user_exists(self, phone_num: str) -> bool:
-        """Check if a WhatsApp user exists in the Ansari backend.
+    async def check_user_exists(self, phone_num: str) -> str:
+        """Get user ID for a WhatsApp phone number.
 
         Args:
             phone_num (str): The user's WhatsApp phone number.
 
         Returns:
-            bool: True if the user exists, False otherwise.
+            str: The user's ID
 
         Raises:
-            UserExistsCheckError: If the check fails.
+            UserExistsCheckError: If the user is not found or the check fails.
         """
         pass
 

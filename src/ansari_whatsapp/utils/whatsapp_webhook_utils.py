@@ -101,10 +101,22 @@ def create_response_for_meta(
         message: Human-readable message
         status_code: HTTP status code to use (only in test mode)
         error_code: Machine-readable error code
-        details: Additional details to include in response
+        details: Additional details to include in response as "detail" key
 
     Returns:
         Response: HTTP response appropriate for current environment
+
+    Notes:
+        **Meta Compliance Requirement:**
+        WhatsApp requires webhooks to return HTTP 200 status within ~5 seconds to acknowledge receipt.
+        If any other status code is returned (or timeout occurs), Meta treats it as a failed delivery and
+        retries with increasing delays for up to 24 hours. This can cause duplicate message processing.
+
+        **Official Documentation:**
+        - WhatsApp Webhooks Setup Guide:
+          https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/overview#webhook-delivery-failure
+        - Webhook Events and Retry Behavior (360dialog):
+          https://docs.360dialog.com/docs/waba-basics/webhook-events-and-notifications
     """
     # Create response body with structured information
     response_body = {
@@ -117,7 +129,7 @@ def create_response_for_meta(
         response_body["error_code"] = error_code
 
     if details:
-        response_body["details"] = details
+        response_body["detail"] = details
 
     # When ALWAYS_RETURN_OK_TO_META is False: return proper HTTP status codes (for testing)
     # When ALWAYS_RETURN_OK_TO_META is True: always return 200 for Meta compliance

@@ -5,10 +5,13 @@ import asyncio
 import time
 from datetime import datetime, timezone
 
+import httpx
+import sentry_sdk
 from loguru import logger
 
 from ansari_whatsapp.services.service_provider import get_ansari_client
 from ansari_whatsapp.services.meta_service_provider import get_meta_api_service
+from ansari_whatsapp.utils.app_logger import request_id_var, user_id_var
 from ansari_whatsapp.utils.exceptions import (
     UserRegistrationError,
     UserExistsCheckError,
@@ -103,24 +106,29 @@ class WhatsAppConversationManager:
             logger.error(f"Error in typing indicator loop: {e}")
             logger.exception(e)
 
-    async def check_and_register_user(self) -> bool:
-        """Check if the user's phone number is stored and register if not.
+    async def retrieve_or_register_user(self) -> str | None:
+        """Retrieve existing user ID or register new user and return their ID.
+
+        This method attempts to get the user_id for a phone number. If the user
+        doesn't exist, it registers them and returns the newly created user_id.
 
         Returns:
-            bool: True if the user exists or was successfully registered, False otherwise.
+            str | None: The user's database ID (UUID string) on success, None on failure.
         """
         if not self.user_phone_num:
-            logger.error("Cannot check and register user: user_phone_num is not set")
-            return False
+            logger.error("Cannot retrieve or register user: user_phone_num is not set")
+            return None
 
         try:
-            # Check if the user's phone number exists
-            user_exists = await self.ansari_client.check_user_exists(self.user_phone_num)
+            # Try to get the user_id from backend
+            user_id = await self.ansari_client.check_user_exists(self.user_phone_num)
+            logger.debug(f"User exists with user_id: {user_id}")
+            return user_id
 
-            if user_exists:
-                return True
+        except UserExistsCheckError:
+            # User doesn't exist - register them with detected language
+            logger.debug(f"User {self.user_phone_num} not found, registering new user")
 
-            # Else, register the user with the detected language
             if self.incoming_msg_type == "text":
                 incoming_msg_text = self.incoming_msg_body["body"]
                 user_lang = get_language_from_text(incoming_msg_text)
@@ -128,23 +136,29 @@ class WhatsAppConversationManager:
                 # Use English as default language if we can't detect it
                 user_lang = "en"
 
-            result = await self.ansari_client.register_user(self.user_phone_num, user_lang)
+            try:
+                result = await self.ansari_client.register_user(self.user_phone_num, user_lang)
 
-            logger.info(f"Registered new whatsapp user (lang: {user_lang}): {self.user_phone_num}")
-            return True
+                # Extract user_id from registration response
+                if isinstance(result, dict):
+                    user_id = result.get("user_id")
+                    logger.info(f"Registered new whatsapp user (lang: {user_lang}, user_id: {user_id}): {self.user_phone_num}")
+                    return user_id
 
-        except UserExistsCheckError as e:
-            logger.error(f"Failed to check if user exists: {e}")
-            return False
-        except UserRegistrationError as e:
-            logger.error(f"Failed to register user {self.user_phone_num}: {e}")
-            await self.send_whatsapp_message(
-                "Sorry, we couldn't register your account. Please try again later."
-            )
-            return False
+                # Registration succeeded but no user_id returned (shouldn't happen)
+                logger.error(f"User registration succeeded but no user_id returned for {self.user_phone_num}")
+                return None
+
+            except UserRegistrationError as e:
+                logger.exception(f"Failed to register user {self.user_phone_num}: {e}")
+                await self.send_whatsapp_message(
+                    "Sorry, we couldn't register your account. Please try again later."
+                )
+                return None
+
         except Exception as e:
-            logger.exception(f"Unexpected error checking/registering user: {e}")
-            return False
+            logger.exception(f"Unexpected error retrieving/registering user: {e}")
+            return None
 
     async def _send_whatsapp_typing_indicator(self) -> None:
         """Send a typing indicator to the WhatsApp recipient."""
@@ -246,8 +260,29 @@ class WhatsAppConversationManager:
                     thread_id=thread_id,
                     message=incoming_txt_msg,
                 )
+            except httpx.TimeoutException as e:
+                logger.error(f"Backend timeout while processing message: {e}")
+                sentry_sdk.set_tag("error_type", "backend_timeout")
+                sentry_sdk.set_context("message_details", {
+                    "request_id": request_id_var.get(),
+                    "user_id": user_id_var.get(),
+                })
+                sentry_sdk.capture_exception(e)
+                await self.send_whatsapp_message(
+                    "The request timed out. Please try sending your message again."
+                )
+                # Cancel typing indicator if running
+                if self.typing_indicator_task and not self.typing_indicator_task.done():
+                    self.typing_indicator_task.cancel()
+                return
             except MessageProcessingError as e:
                 logger.error(f"Failed to process message: {e}")
+                sentry_sdk.set_tag("error_type", "message_processing_failure")
+                sentry_sdk.set_context("message_details", {
+                    "request_id": request_id_var.get(),
+                    "user_id": user_id_var.get(),
+                })
+                sentry_sdk.capture_exception(e)
                 await self.send_whatsapp_message(
                     "An error occurred while processing your message. Please try again later."
                 )

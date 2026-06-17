@@ -933,19 +933,18 @@ aws apprunner delete-service \
 
 ### Common AWS CLI Commands
 
-**Update a secret:**
+**List all parameters:**
 ```bash
-aws ssm put-parameter --name "<path>" --value "<new-value>" --overwrite --profile ansari --region us-west-2
+aws ssm describe-parameters --profile ansari --region us-west-2
 ```
-
-**Check current value:**
+**Check current parameter value:**
 ```bash
 aws ssm get-parameter --name "<path>" --with-decryption --profile ansari --region us-west-2
 ```
 
-**List all parameters:**
+**Update a secret:**
 ```bash
-aws ssm describe-parameters --profile ansari --region us-west-2
+aws ssm put-parameter --name "<path>" --value "<new-value>" --overwrite --profile ansari --region us-west-2
 ```
 
 **Check App Runner services:**

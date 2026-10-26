@@ -225,9 +225,10 @@ async def parse_meta_payload(
     if "from" not in incoming_msg and incoming_msg.get("from_user_id"):
         raise PhoneHiddenUserError(incoming_msg["from_user_id"])
 
-    # TEMPORARY: find a real BSUID for a live send test; remove right after
-    if incoming_msg.get("from_user_id"):
-        logger.info(f"TEMP BSUID probe: from_user_id={incoming_msg['from_user_id']}")
+    # Uncomment only to read your own BSUID for testing (message the number, then read this log line); recomment right after.
+    # It prints a user identifier, so never leave it enabled in production.
+    # if incoming_msg.get("from_user_id"):
+    #     logger.info(f"BSUID probe: from_user_id={incoming_msg['from_user_id']}")
 
     try:
         # Extract message details
